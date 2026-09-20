@@ -183,7 +183,7 @@ impl CaptureStore {
         Ok(())
     }
 
-    fn get(&self, id: &str) -> Result<CaptureRecord, StorageError> {
+    pub fn get(&self, id: &str) -> Result<CaptureRecord, StorageError> {
         let connection = self.connection()?;
         let record = connection
             .query_row(

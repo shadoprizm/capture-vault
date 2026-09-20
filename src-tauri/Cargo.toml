@@ -1,6 +1,6 @@
 [package]
 name = "capture-vault"
-version = "0.1.1"
+version = "0.1.2"
 description = "A private, local-first screenshot library"
 authors = ["CaptureVault contributors"]
 edition = "2024"
@@ -21,7 +21,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-drag = "2.1.1"
 chrono = { version = "0.4", features = ["serde"] }
+clipboard-rs = { version = "0.3.5", features = ["wayland"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

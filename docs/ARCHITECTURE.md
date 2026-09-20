@@ -7,7 +7,7 @@ CaptureVault is a Tauri application with a React interface and a Rust core. Capt
 ```text
 React interface
   ├─ capture controls
-  ├─ library and search
+  ├─ library, search, copy, and native drag-out
   └─ details editor
           │ Tauri commands
 Rust core
@@ -41,6 +41,13 @@ Images and metadata are deliberately separate:
 - Plain PNG files remain inspectable and recoverable.
 - Relative database paths allow a future library relocation feature.
 
+## Reuse flow
+
+- Copy resolves a capture by its library ID, then publishes both `image/png` and the PNG file list to the system clipboard. This lets rich editors paste the pixels while email clients, upload controls, and file managers can consume the original file.
+- Linux additionally publishes the GNOME copy-files MIME type so pasting into a folder is treated as a copy, not a move.
+- Dragging a library card or the large preview hands the absolute PNG path to the operating system's native drag session in copy mode. The destination receives a real file rather than a web image URL.
+- Transfer actions never duplicate or relocate the library's managed source file.
+
 ## Failure behavior
 
 - A failed file copy does not insert a database row.
@@ -52,7 +59,7 @@ Images and metadata are deliberately separate:
 
 - The asset protocol is enabled only for the application-data directory.
 - The content security policy allows application assets and the Tauri local asset protocol only.
-- No remote image sources, telemetry, or upload service are configured.
+- No remote image sources, telemetry, or upload service are configured. A screenshot leaves the vault only after the user explicitly copies or drags it.
 - The XDG portal remains responsible for Wayland capture permissions and selection UI.
 
 ## Next architectural steps

@@ -11,6 +11,8 @@ CaptureVault is a private, local-first screenshot library. Capture an area or a 
 - Browse a responsive thumbnail library
 - Search filenames, notes, tags, and capture types
 - Add notes, tags, and favorites
+- Copy a capture as both an image and PNG file for pasting or attaching
+- Drag a capture directly into another app or folder as a native file copy
 - Permanently delete a capture and its metadata
 - Run without an account or network service
 
@@ -61,7 +63,7 @@ CaptureVault stores screenshots and its SQLite index in the operating system's a
 
 1. Validate the capture flow across Ubuntu GNOME Wayland, Ubuntu X11, multiple displays, and mixed scaling.
 2. Add tray controls and configurable global shortcuts.
-3. Add copy, export, reveal-in-folder, and configurable library locations.
+3. Add export, reveal-in-folder, and configurable library locations.
 4. Implement macOS capture with ScreenCaptureKit.
 5. Implement Windows capture with Windows Graphics Capture.
 6. Add optional OCR and annotation after the core library is stable.

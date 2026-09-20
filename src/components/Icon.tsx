@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 export type IconName =
   | "check"
   | "close"
+  | "copy"
   | "crop"
   | "focus"
   | "grid"
+  | "grip"
   | "lock"
   | "monitor"
   | "search"
@@ -22,6 +24,12 @@ type IconProps = {
 const paths: Record<IconName, ReactNode> = {
   check: <path d="m5 12 4 4L19 6" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
+  copy: (
+    <>
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </>
+  ),
   crop: <path d="M7 3v14a2 2 0 0 0 2 2h12M3 7h14a2 2 0 0 1 2 2v12" />,
   focus: (
     <>
@@ -35,6 +43,16 @@ const paths: Record<IconName, ReactNode> = {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  grip: (
+    <>
+      <circle cx="8" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="17" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="17" r="1" fill="currentColor" stroke="none" />
     </>
   ),
   lock: (

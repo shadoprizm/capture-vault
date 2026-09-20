@@ -14,7 +14,8 @@ Someone who regularly captures visual information for research, design, troubles
 2. Capture a complete display when context matters.
 3. Confirm that the capture was saved.
 4. Find a previous screenshot using its date, note, tag, or visual thumbnail.
-5. Remove screenshots that are no longer needed.
+5. Copy or drag a saved screenshot directly into another app or folder.
+6. Remove screenshots that are no longer needed.
 
 ## Version 0.1 scope
 
@@ -22,7 +23,7 @@ Someone who regularly captures visual information for research, design, troubles
 - Area and full-screen buttons
 - System-owned Wayland permission and selection flow
 - Local PNG storage with a SQLite index
-- Gallery, search, notes, tags, favorites, and deletion
+- Gallery, search, notes, tags, favorites, copy, native drag-out, and deletion
 - Responsive interface suitable for laptop and desktop windows
 
 ## Explicit non-goals for 0.1
@@ -50,5 +51,7 @@ Someone who regularly captures visual information for research, design, troubles
 - Relaunching the application restores the library.
 - Notes, tags, and favorite state persist.
 - Search filters the local library without network access.
+- Copy publishes both image data and the saved PNG file for inline pasting and file attachments.
+- Dragging a capture starts a native copy operation that can drop the PNG into another app or folder.
 - Deletion removes both the image and database row after confirmation.
 - A cancelled portal request does not create a record or leave the app hidden.

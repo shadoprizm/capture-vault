@@ -2,6 +2,9 @@ mod capture;
 mod models;
 mod storage;
 
+use clipboard_rs::{
+    Clipboard, ClipboardContent, ClipboardContext, RustImageData, common::RustImage,
+};
 use models::{CaptureMode, CaptureRecord};
 use storage::CaptureStore;
 use tauri::{Manager, State};
@@ -49,9 +52,38 @@ fn delete_capture(id: String, state: State<'_, AppState>) -> Result<(), String> 
     state.store.delete(&id).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn copy_capture(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let capture = state.store.get(&id).map_err(|error| error.to_string())?;
+    let image = RustImageData::from_path(&capture.file_path)
+        .map_err(|error| format!("Could not read the screenshot for copying: {error}"))?;
+    let clipboard = ClipboardContext::new()
+        .map_err(|error| format!("Could not access the system clipboard: {error}"))?;
+
+    let mut contents = vec![
+        ClipboardContent::Files(vec![capture.file_path.clone()]),
+        ClipboardContent::Image(image),
+    ];
+
+    // Linux file managers use this MIME type to distinguish copying from moving.
+    // `Files` also publishes the standard text/uri-list representation.
+    #[cfg(target_os = "linux")]
+    if let Ok(uri) = url::Url::from_file_path(&capture.file_path) {
+        contents.push(ClipboardContent::Other(
+            "x-special/gnome-copied-files".into(),
+            format!("copy\n{uri}").into_bytes(),
+        ));
+    }
+
+    clipboard
+        .set(contents)
+        .map_err(|error| format!("Could not copy the screenshot: {error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_drag::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let store = CaptureStore::new(data_dir)?;
@@ -62,7 +94,8 @@ pub fn run() {
             list_captures,
             capture_screen,
             update_capture_metadata,
-            delete_capture
+            delete_capture,
+            copy_capture
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

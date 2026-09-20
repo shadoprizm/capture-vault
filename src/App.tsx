@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Icon } from "./components/Icon";
@@ -20,7 +28,16 @@ type CaptureRecord = {
 
 type LibraryFilter = "all" | "favorites";
 
+type DragGesture = {
+  captureId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  started: boolean;
+};
+
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
+const DRAG_THRESHOLD = 5;
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -56,6 +73,10 @@ function App() {
   const [draftNote, setDraftNote] = useState("");
   const [draftTags, setDraftTags] = useState("");
   const [saving, setSaving] = useState(false);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragGesture = useRef<DragGesture | null>(null);
+  const suppressCardClick = useRef(false);
 
   const selected = captures.find((capture) => capture.id === selectedId) ?? null;
 
@@ -185,6 +206,113 @@ function App() {
     }
   }
 
+  async function copyCapture(capture: CaptureRecord) {
+    if (!isTauriRuntime) {
+      setNotice("Copying screenshots is available in the desktop app.");
+      return;
+    }
+
+    setCopyingId(capture.id);
+    setError(null);
+
+    try {
+      await invoke("copy_capture", { id: capture.id });
+      setNotice("Copied as an image and PNG file. Paste it wherever you need it.");
+    } catch (copyError) {
+      setError(errorMessage(copyError));
+    } finally {
+      setCopyingId(null);
+    }
+  }
+
+  function beginNativeDrag(capture: CaptureRecord) {
+    if (!isTauriRuntime) return;
+
+    setDraggingId(capture.id);
+    setError(null);
+
+    void startDrag(
+      {
+        item: [capture.filePath],
+        icon: capture.filePath,
+        mode: "copy",
+      },
+      ({ result }) => {
+        setDraggingId((current) => (current === capture.id ? null : current));
+        if (result === "Dropped") {
+          setNotice("Screenshot dropped as a PNG file.");
+        }
+      },
+    ).catch((dragError) => {
+      setDraggingId((current) => (current === capture.id ? null : current));
+      setError(errorMessage(dragError));
+    });
+  }
+
+  function startDragGesture(
+    event: ReactPointerEvent<HTMLElement>,
+    capture: CaptureRecord,
+  ) {
+    if (!isTauriRuntime || !event.isPrimary || event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button, input, textarea")) return;
+
+    suppressCardClick.current = false;
+    dragGesture.current = {
+      captureId: capture.id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      started: false,
+    };
+  }
+
+  function continueDragGesture(
+    event: ReactPointerEvent<HTMLElement>,
+    capture: CaptureRecord,
+  ) {
+    const gesture = dragGesture.current;
+    if (!gesture || gesture.captureId !== capture.id || gesture.pointerId !== event.pointerId) {
+      return;
+    }
+    if ((event.buttons & 1) === 0) {
+      dragGesture.current = null;
+      return;
+    }
+    if (gesture.started) return;
+
+    const distance = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY);
+    if (distance < DRAG_THRESHOLD) return;
+
+    gesture.started = true;
+    suppressCardClick.current = true;
+    event.preventDefault();
+    beginNativeDrag(capture);
+  }
+
+  function endDragGesture(event: ReactPointerEvent<HTMLElement>) {
+    if (dragGesture.current?.pointerId === event.pointerId) {
+      dragGesture.current = null;
+    }
+  }
+
+  function captureCardKeyDown(
+    event: ReactKeyboardEvent<HTMLElement>,
+    capture: CaptureRecord,
+  ) {
+    if (event.target !== event.currentTarget) return;
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+      event.preventDefault();
+      void copyCapture(capture);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setSelectedId(capture.id);
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -225,7 +353,7 @@ function App() {
           </div>
         </div>
 
-        <p className="version">Early preview · v0.1.1</p>
+        <p className="version">Early preview · v0.1.2</p>
       </aside>
 
       <main className="workspace">
@@ -270,9 +398,15 @@ function App() {
               </button>
             )}
           </label>
-          <span className="result-count">
-            {visibleCaptures.length} {visibleCaptures.length === 1 ? "capture" : "captures"}
-          </span>
+          <div className="library-status">
+            <span className="transfer-tip">
+              <Icon name="grip" size={15} />
+              Copy or drag any capture into another app
+            </span>
+            <span className="result-count">
+              {visibleCaptures.length} {visibleCaptures.length === 1 ? "capture" : "captures"}
+            </span>
+          </div>
         </section>
 
         {error && (
@@ -303,16 +437,52 @@ function App() {
           </div>
         ) : visibleCaptures.length > 0 ? (
           <section className="capture-grid" aria-label="Captures">
+            <p id="capture-transfer-instructions" className="sr-only">
+              Press Control or Command C to copy a focused screenshot. Drag a card to copy the PNG
+              into another app or folder.
+            </p>
             {visibleCaptures.map((capture) => (
               <article
-                className="capture-card"
+                className={`capture-card ${draggingId === capture.id ? "dragging" : ""}`}
                 key={capture.id}
-                onClick={() => setSelectedId(capture.id)}
+                onClick={() => {
+                  if (suppressCardClick.current) {
+                    suppressCardClick.current = false;
+                    return;
+                  }
+                  setSelectedId(capture.id);
+                }}
+                onKeyDown={(event) => captureCardKeyDown(event, capture)}
+                onPointerDown={(event) => startDragGesture(event, capture)}
+                onPointerMove={(event) => continueDragGesture(event, capture)}
+                onPointerUp={endDragGesture}
+                onPointerCancel={endDragGesture}
+                tabIndex={0}
+                aria-describedby="capture-transfer-instructions"
+                aria-label={`${capture.note || fileName(capture.filePath)}, screenshot`}
               >
                 <div className="capture-preview">
-                  <img src={imageSource(capture)} alt={capture.note || "Screenshot"} />
+                  <img
+                    src={imageSource(capture)}
+                    alt={capture.note || "Screenshot"}
+                    draggable={false}
+                  />
+                  <button
+                    className="copy-button"
+                    type="button"
+                    disabled={copyingId === capture.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void copyCapture(capture);
+                    }}
+                    aria-label={`Copy ${fileName(capture.filePath)}`}
+                    title="Copy image and file"
+                  >
+                    <Icon name={copyingId === capture.id ? "check" : "copy"} size={17} />
+                  </button>
                   <button
                     className={`favorite-button ${capture.favorite ? "selected" : ""}`}
+                    type="button"
                     onClick={(event) => {
                       event.stopPropagation();
                       void toggleFavorite(capture);
@@ -323,6 +493,10 @@ function App() {
                   </button>
                   <span className="mode-pill">
                     {capture.captureMode === "area" ? "Area" : "Screen"}
+                  </span>
+                  <span className="drag-hint" aria-hidden="true">
+                    <Icon name="grip" size={14} />
+                    {draggingId === capture.id ? "Dragging…" : "Drag to share"}
                   </span>
                 </div>
                 <div className="capture-card-copy">
@@ -398,11 +572,38 @@ function App() {
               </button>
             </header>
 
-            <img
-              className="detail-image"
-              src={imageSource(selected)}
-              alt={selected.note || "Selected screenshot"}
-            />
+            <div
+              className={`detail-image-shell ${draggingId === selected.id ? "dragging" : ""}`}
+              onPointerDown={(event) => startDragGesture(event, selected)}
+              onPointerMove={(event) => continueDragGesture(event, selected)}
+              onPointerUp={endDragGesture}
+              onPointerCancel={endDragGesture}
+              title="Drag this PNG into another app or folder"
+            >
+              <img
+                className="detail-image"
+                src={imageSource(selected)}
+                alt={selected.note || "Selected screenshot"}
+                draggable={false}
+              />
+              <span className="detail-drag-hint" aria-hidden="true">
+                <Icon name="grip" size={15} />
+                {draggingId === selected.id ? "Dragging…" : "Drag PNG to share"}
+              </span>
+            </div>
+
+            <div className="detail-transfer">
+              <button
+                className="primary-action"
+                type="button"
+                disabled={copyingId === selected.id}
+                onClick={() => void copyCapture(selected)}
+              >
+                <Icon name={copyingId === selected.id ? "check" : "copy"} />
+                {copyingId === selected.id ? "Copied" : "Copy screenshot"}
+              </button>
+              <p>Paste inline or as a file into email, documents, chats, cloud apps, and folders.</p>
+            </div>
 
             <dl className="capture-facts">
               <div>
