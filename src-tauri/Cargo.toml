@@ -1,6 +1,6 @@
 [package]
 name = "capture-vault"
-version = "0.1.0"
+version = "0.1.1"
 description = "A private, local-first screenshot library"
 authors = ["CaptureVault contributors"]
 edition = "2024"

@@ -225,7 +225,7 @@ function App() {
           </div>
         </div>
 
-        <p className="version">Early preview · v0.1.0</p>
+        <p className="version">Early preview · v0.1.1</p>
       </aside>
 
       <main className="workspace">
