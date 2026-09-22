@@ -25,7 +25,11 @@ pub struct CaptureRecord {
     pub width: u32,
     pub height: u32,
     pub capture_mode: String,
+    pub title: String,
+    pub description: String,
     pub note: String,
     pub tags: Vec<String>,
     pub favorite: bool,
+    pub ocr_text: String,
+    pub enrichment_status: String,
 }

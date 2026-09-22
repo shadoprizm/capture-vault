@@ -1,0 +1,60 @@
+name: capture-vault
+title: CaptureVault
+version: "0.2.0"
+summary: Private, local-first screenshot library
+description: |
+  Capture screenshots into a local, searchable visual archive. CaptureVault
+  keeps images, OCR text, notes, tags, and favorites on your device, with no
+  account, analytics, or cloud service required.
+
+  This is an early Linux preview. Screen capture relies on the XDG Desktop
+  Portal and must be tested on both Wayland and X11 before promotion to stable.
+base: core24
+grade: devel
+confinement: strict
+# The application is MIT; bundled OCR models are CC-BY-SA-4.0. See their NOTICE.
+license: MIT AND CC-BY-SA-4.0
+website: https://github.com/shadoprizm/capture-vault
+source-code: https://github.com/shadoprizm/capture-vault
+issues: https://github.com/shadoprizm/capture-vault/issues
+contact: https://github.com/shadoprizm/capture-vault/issues
+icon: src-tauri/icons/icon.png
+
+apps:
+  capture-vault:
+    command: usr/bin/capture-vault
+    desktop: usr/share/applications/CaptureVault.desktop
+    extensions: [gnome]
+    plugs:
+      # Needed when a person selects a library location in their home folder.
+      - home
+      # Explicitly opted-in vision uses a loopback-only endpoint in the app.
+      - network
+
+parts:
+  capture-vault:
+    source: .
+    plugin: rust
+    rust-channel: stable
+    build-snaps:
+      - node/22/stable
+    build-packages:
+      - build-essential
+      - dpkg-dev
+      - file
+      - libayatana-appindicator3-dev
+      - libdbus-1-dev
+      - librsvg2-dev
+      - libssl-dev
+      - libwebkit2gtk-4.1-dev
+      - patchelf
+      - pkg-config
+    # The GNOME extension provides GTK and WebKit through its content snap.
+    # Staging them here duplicates hundreds of runtime files and bypasses the
+    # extension's WebKit/GPU layouts.
+    override-build: |
+      npm ci
+      npm run tauri build -- --bundles deb
+      package="$(find src-tauri/target/release/bundle/deb -maxdepth 1 -type f -name 'CaptureVault_*.deb' -print -quit)"
+      test -n "$package"
+      dpkg-deb --extract "$package" "$CRAFT_PART_INSTALL"

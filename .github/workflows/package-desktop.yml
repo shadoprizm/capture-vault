@@ -1,0 +1,78 @@
+name: Package desktop installers (manual)
+
+# This is intentionally build-only. It never creates a GitHub Release or uploads
+# assets publicly: native capture is currently supported only on Linux.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Ubuntu
+            runner: ubuntu-22.04
+            artifact: ubuntu
+          - label: Windows
+            runner: windows-latest
+            artifact: windows
+          - label: macOS
+            runner: macos-latest
+            artifact: macos
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install Linux build and bundling dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            file \
+            libayatana-appindicator3-dev \
+            libdbus-1-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            pkg-config \
+            xdg-utils
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build native Tauri bundles
+        run: npm run tauri build
+
+      # `bundle.targets: "all"` controls the concrete formats. This uploads every
+      # format Tauri emits (for example MSI/NSIS EXE, .app/.dmg, AppImage/.deb/.rpm).
+      - name: Upload generated desktop bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-vault-${{ matrix.artifact }}
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 14

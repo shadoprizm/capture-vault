@@ -32,13 +32,15 @@ body {
 
 button,
 input,
-textarea { font: inherit; }
+textarea,
+select { font: inherit; }
 
 button { color: inherit; }
 
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus-visible {
   outline: 3px solid rgba(134, 196, 57, 0.3);
   outline-offset: 2px;
 }
@@ -255,6 +257,22 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
   cursor: wait;
 }
 
+.button-shortcut {
+  margin-left: 3px;
+  padding: 2px 5px;
+  color: currentColor;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(60, 70, 52, 0.17);
+  border-radius: 5px;
+  opacity: 0.72;
+}
+
+.secondary-action .button-shortcut { background: #f3f5ef; }
+
 .library-toolbar {
   display: flex;
   align-items: center;
@@ -355,6 +373,175 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
 
 .message button { color: currentColor; }
 
+.settings-page {
+  width: min(760px, 100%);
+  margin: 34px auto 0;
+}
+
+.settings-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.settings-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 43px;
+  height: 43px;
+  place-items: center;
+  color: #334526;
+  background: #e6f4d5;
+  border: 1px solid #d4e8bd;
+  border-radius: 12px;
+}
+
+.settings-intro h2 { font-size: 21px; }
+
+.settings-intro p,
+.shortcut-editor p,
+.settings-note p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-card {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  box-shadow: 0 3px 12px rgba(40, 45, 37, 0.035);
+}
+
+.settings-section-title {
+  margin: 24px 2px 9px;
+  color: #4f5849;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.storage-setting {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 19px 21px;
+}
+
+.storage-setting-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: #52633f;
+  background: #eef5e6;
+  border-radius: 9px;
+}
+
+.storage-setting-copy { min-width: 0; }
+
+.storage-setting-copy strong { font-size: 14px; }
+
+.storage-setting-copy p {
+  margin: 3px 0 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.storage-setting-copy code {
+  display: block;
+  overflow: hidden;
+  color: #4f5849;
+  font-family: inherit;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut-editor {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto;
+  align-items: center;
+  gap: 15px 24px;
+  padding: 21px;
+  transition: opacity 140ms ease;
+}
+
+.shortcut-editor + .shortcut-editor { border-top: 1px solid var(--line); }
+
+.shortcut-editor.disabled .shortcut-editor-copy,
+.shortcut-editor.disabled .shortcut-selectors { opacity: 0.52; }
+
+.shortcut-editor-copy strong { font-size: 14px; }
+
+.shortcut-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 7px;
+  color: #596052;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shortcut-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #75a53c;
+}
+
+.shortcut-selectors {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 9px;
+}
+
+.shortcut-selectors select {
+  min-width: 170px;
+  height: 39px;
+  padding: 0 34px 0 11px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #d7dbd2;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.shortcut-selectors select:last-child { min-width: 90px; }
+
+.shortcut-selectors select:disabled { cursor: not-allowed; }
+
+.shortcut-selectors > span {
+  color: #858b80;
+  font-weight: 750;
+}
+
+.settings-note {
+  display: flex;
+  gap: 9px;
+  margin: 14px 2px 0;
+  color: #6b795f;
+}
+
+.settings-note svg { flex: 0 0 auto; margin-top: 5px; }
+
+.settings-note p { margin: 0; }
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 24px;
+}
+
 .capture-grid,
 .loading-grid {
   display: grid;
@@ -372,6 +559,8 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
 }
 
 .capture-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 275px;
   cursor: grab;
   box-shadow: 0 3px 12px rgba(40, 45, 37, 0.035);
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
@@ -456,6 +645,29 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
   backdrop-filter: blur(7px);
 }
 
+.enrichment-pill {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  color: #223017;
+  font-size: 10px;
+  font-weight: 750;
+  background: rgba(205, 246, 151, 0.94);
+  border-radius: 7px;
+  box-shadow: 0 3px 10px rgba(20, 24, 18, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.enrichment-pill svg { animation: soft-pulse 1.4s ease-in-out infinite; }
+
+@keyframes soft-pulse {
+  50% { opacity: 0.45; transform: scale(0.88); }
+}
+
 .drag-hint,
 .detail-drag-hint {
   display: inline-flex;
@@ -517,6 +729,17 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
   flex: 0 0 auto;
   margin: 1px 0 0;
   font-size: 10px;
+}
+
+.capture-card-description {
+  display: -webkit-box;
+  margin: -7px 14px 13px;
+  overflow: hidden;
+  color: #70766c;
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .tag-row {
@@ -731,6 +954,110 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
   white-space: nowrap;
 }
 
+.enrichment-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 12px;
+  background: #f0f6e9;
+  border: 1px solid #d9e7ca;
+  border-radius: 11px;
+}
+
+.enrichment-card-copy {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.enrichment-card-copy > div { min-width: 0; }
+
+.enrichment-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: #527426;
+  background: #dff4c1;
+  border-radius: 8px;
+}
+
+.enrichment-icon.processing svg { animation: soft-pulse 1.4s ease-in-out infinite; }
+.enrichment-icon.failed { color: #9b443e; background: #f8deda; }
+
+.enrichment-card strong {
+  display: block;
+  color: #34432a;
+  font-size: 12px;
+}
+
+.enrichment-card p {
+  margin: 3px 0 0;
+  color: #78836f;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.compact-action {
+  flex: 0 0 auto;
+  min-height: 33px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.ocr-details {
+  margin-top: 16px;
+  overflow: hidden;
+  background: #f4f5f1;
+  border: 1px solid #dde0d8;
+  border-radius: 9px;
+}
+
+.ocr-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  color: #555d50;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ocr-details summary::-webkit-details-marker { display: none; }
+
+.ocr-details summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ocr-details summary > span:last-child {
+  color: #92988d;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.ocr-details pre {
+  max-height: 240px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  color: #343a31;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  background: #fff;
+  border-top: 1px solid #dde0d8;
+}
+
 .field {
   display: block;
   margin-top: 16px;
@@ -800,7 +1127,16 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
   .topbar { align-items: flex-start; flex-direction: column; }
   .capture-actions { width: 100%; }
   .capture-actions button { flex: 1; }
+  .button-shortcut { display: none; }
   .search-box { width: 100%; }
   .library-status { display: none; }
   .capture-grid { grid-template-columns: 1fr; }
+  .settings-page { margin-top: 25px; }
+  .storage-setting { grid-template-columns: auto minmax(0, 1fr); }
+  .storage-setting .secondary-action { grid-column: 1 / -1; }
+  .shortcut-editor { grid-template-columns: 1fr; gap: 12px; }
+  .shortcut-toggle { justify-self: start; }
+  .shortcut-selectors { grid-column: 1; }
+  .shortcut-selectors select { min-width: 0; flex: 1; }
+  .settings-actions { align-items: stretch; flex-direction: column-reverse; }
 }

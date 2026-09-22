@@ -8,7 +8,14 @@ import {
 } from "react";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  register,
+  unregisterAll,
+  type ShortcutEvent,
+} from "@tauri-apps/plugin-global-shortcut";
 import { Icon } from "./components/Icon";
 import "./App.css";
 
@@ -21,12 +28,39 @@ type CaptureRecord = {
   width: number;
   height: number;
   captureMode: CaptureMode;
+  title: string;
+  description: string;
   note: string;
   tags: string[];
   favorite: boolean;
+  ocrText: string;
+  enrichmentStatus:
+    | "pending"
+    | "processing"
+    | "complete"
+    | "partial"
+    | "no_text"
+    | "failed";
 };
 
 type LibraryFilter = "all" | "favorites";
+
+type ShortcutModifiers =
+  | "Control+Alt"
+  | "Control+Shift"
+  | "Alt+Shift"
+  | "Super+Shift"
+  | "Super+Alt"
+  | "Control+Super"
+  | "Control+Alt+Shift";
+
+type ShortcutBinding = {
+  enabled: boolean;
+  modifiers: ShortcutModifiers;
+  key: string;
+};
+
+type ShortcutSettings = Record<CaptureMode, ShortcutBinding>;
 
 type DragGesture = {
   captureId: string;
@@ -36,8 +70,81 @@ type DragGesture = {
   started: boolean;
 };
 
+type StorageLocationUpdate = {
+  path: string;
+  captures: CaptureRecord[];
+};
+
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
 const DRAG_THRESHOLD = 5;
+const SHORTCUT_STORAGE_KEY = "capture-vault.shortcuts.v1";
+const SHORTCUT_MODIFIERS: ShortcutModifiers[] = [
+  "Control+Alt",
+  "Control+Shift",
+  "Alt+Shift",
+  "Super+Shift",
+  "Super+Alt",
+  "Control+Super",
+  "Control+Alt+Shift",
+];
+const SHORTCUT_KEYS = [
+  ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
+  ..."0123456789".split(""),
+  ...Array.from({ length: 12 }, (_, index) => `F${index + 1}`),
+];
+const DEFAULT_SHORTCUTS: ShortcutSettings = {
+  area: { enabled: true, modifiers: "Control+Alt", key: "A" },
+  screen: { enabled: true, modifiers: "Control+Alt", key: "F" },
+};
+
+let shortcutOperation = Promise.resolve();
+
+function queueShortcutOperation<T>(operation: () => Promise<T>) {
+  const queued = shortcutOperation.catch(() => undefined).then(operation);
+  shortcutOperation = queued.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queued;
+}
+
+function cloneShortcuts(settings: ShortcutSettings): ShortcutSettings {
+  return {
+    area: { ...settings.area },
+    screen: { ...settings.screen },
+  };
+}
+
+function isShortcutBinding(value: unknown): value is ShortcutBinding {
+  if (!value || typeof value !== "object") return false;
+  const binding = value as Partial<ShortcutBinding>;
+  return (
+    typeof binding.enabled === "boolean" &&
+    SHORTCUT_MODIFIERS.includes(binding.modifiers as ShortcutModifiers) &&
+    typeof binding.key === "string" &&
+    SHORTCUT_KEYS.includes(binding.key)
+  );
+}
+
+function loadShortcutSettings(): ShortcutSettings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SHORTCUT_STORAGE_KEY) ?? "null") as Partial<ShortcutSettings> | null;
+    if (saved && isShortcutBinding(saved.area) && isShortcutBinding(saved.screen)) {
+      return cloneShortcuts(saved as ShortcutSettings);
+    }
+  } catch {
+    // Invalid or inaccessible local settings fall back to the documented defaults.
+  }
+  return cloneShortcuts(DEFAULT_SHORTCUTS);
+}
+
+function shortcutAccelerator(binding: ShortcutBinding) {
+  return `${binding.modifiers}+${binding.key}`;
+}
+
+function shortcutLabel(binding: ShortcutBinding) {
+  return shortcutAccelerator(binding).replace("Control", "Ctrl").split("+").join(" + ");
+}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -61,24 +168,119 @@ function imageSource(capture: CaptureRecord) {
   return isTauriRuntime ? convertFileSrc(capture.filePath) : "";
 }
 
+function captureLabel(capture: CaptureRecord) {
+  return capture.title || capture.note || fileName(capture.filePath);
+}
+
+function enrichmentLabel(status: CaptureRecord["enrichmentStatus"]) {
+  switch (status) {
+    case "processing":
+      return "Analyzing locally…";
+    case "complete":
+      return "Semantic analysis complete";
+    case "partial":
+      return "OCR ready; optional vision analysis is off or unavailable";
+    case "no_text":
+      return "No readable text found";
+    case "failed":
+      return "Analysis needs another try";
+    default:
+      return "Ready for local analysis";
+  }
+}
+
+type ShortcutEditorProps = {
+  description: string;
+  label: string;
+  value: ShortcutBinding;
+  onChange: (value: ShortcutBinding) => void;
+};
+
+function ShortcutEditor({ description, label, value, onChange }: ShortcutEditorProps) {
+  return (
+    <div className={`shortcut-editor ${value.enabled ? "" : "disabled"}`}>
+      <div className="shortcut-editor-copy">
+        <strong>{label}</strong>
+        <p>{description}</p>
+      </div>
+      <label className="shortcut-toggle">
+        <input
+          type="checkbox"
+          checked={value.enabled}
+          onChange={(event) => onChange({ ...value, enabled: event.currentTarget.checked })}
+        />
+        <span>{value.enabled ? "Enabled" : "Disabled"}</span>
+      </label>
+      <div className="shortcut-selectors" aria-label={`${label} shortcut`}>
+        <select
+          value={value.modifiers}
+          disabled={!value.enabled}
+          onChange={(event) =>
+            onChange({ ...value, modifiers: event.currentTarget.value as ShortcutModifiers })
+          }
+          aria-label={`${label} modifiers`}
+        >
+          {SHORTCUT_MODIFIERS.map((modifiers) => (
+            <option value={modifiers} key={modifiers}>
+              {modifiers.replace("Control", "Ctrl").split("+").join(" + ")}
+            </option>
+          ))}
+        </select>
+        <span aria-hidden="true">+</span>
+        <select
+          value={value.key}
+          disabled={!value.enabled}
+          onChange={(event) => onChange({ ...value, key: event.currentTarget.value })}
+          aria-label={`${label} key`}
+        >
+          {SHORTCUT_KEYS.map((key) => (
+            <option value={key} key={key}>
+              {key}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [captures, setCaptures] = useState<CaptureRecord[]>([]);
   const [filter, setFilter] = useState<LibraryFilter>("all");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>(loadShortcutSettings);
+  const [draftShortcuts, setDraftShortcuts] = useState<ShortcutSettings>(() =>
+    cloneShortcuts(shortcutSettings),
+  );
+  const [savingShortcuts, setSavingShortcuts] = useState(false);
+  const [storageLocation, setStorageLocation] = useState("");
+  const [changingStorage, setChangingStorage] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState<CaptureMode | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftTags, setDraftTags] = useState("");
   const [saving, setSaving] = useState(false);
   const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragGesture = useRef<DragGesture | null>(null);
   const suppressCardClick = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  const captureInProgressRef = useRef(false);
+  const captureRef = useRef<
+    (mode: CaptureMode, trigger?: "button" | "shortcut") => Promise<void>
+  >(async () => undefined);
+  const shortcutSettingsRef = useRef(shortcutSettings);
 
   const selected = captures.find((capture) => capture.id === selectedId) ?? null;
+
+  shortcutSettingsRef.current = shortcutSettings;
 
   const visibleCaptures = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -86,7 +288,10 @@ function App() {
       if (filter === "favorites" && !capture.favorite) return false;
       if (!needle) return true;
       return [
+        capture.title,
+        capture.description,
         capture.note,
+        capture.ocrText,
         capture.captureMode,
         fileName(capture.filePath),
         ...capture.tags,
@@ -103,7 +308,12 @@ function App() {
       }
 
       try {
-        setCaptures(await invoke<CaptureRecord[]>("list_captures"));
+        const [savedCaptures, savedLocation] = await Promise.all([
+          invoke<CaptureRecord[]>("list_captures"),
+          invoke<string>("get_storage_location"),
+        ]);
+        setCaptures(savedCaptures);
+        setStorageLocation(savedLocation);
       } catch (loadError) {
         setError(errorMessage(loadError));
       } finally {
@@ -115,21 +325,193 @@ function App() {
   }, []);
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!isTauriRuntime) return;
+
+    let active = true;
+    void queueShortcutOperation(async () => {
+      await unregisterAll();
+      if (!active) return;
+      try {
+        await registerShortcutBindings(shortcutSettingsRef.current);
+      } catch (shortcutError) {
+        await unregisterAll().catch(() => undefined);
+        throw shortcutError;
+      }
+    }).catch((shortcutError) => {
+      if (active) {
+        setError(`Global shortcuts are unavailable: ${errorMessage(shortcutError)}`);
+      }
+    });
+
+    return () => {
+      active = false;
+      void queueShortcutOperation(() => unregisterAll()).catch(() => undefined);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime) return;
+
+    let disposed = false;
+    let stopEnriched: (() => void) | undefined;
+    let stopFailed: (() => void) | undefined;
+
+    void Promise.all([
+      listen<CaptureRecord>("capture-enriched", ({ payload }) => {
+        setCaptures((current) =>
+          current.map((capture) => (capture.id === payload.id ? payload : capture)),
+        );
+        setAnalyzingId((current) => (current === payload.id ? null : current));
+        if (selectedIdRef.current === payload.id) {
+          setDraftTitle((current) => current || payload.title);
+          setDraftDescription((current) => current || payload.description);
+        }
+      }),
+      listen<string>("capture-enrichment-failed", ({ payload }) => {
+        setError(payload);
+        setAnalyzingId(null);
+      }),
+    ])
+      .then(([unlistenEnriched, unlistenFailed]) => {
+        if (disposed) {
+          unlistenEnriched();
+          unlistenFailed();
+          return;
+        }
+        stopEnriched = unlistenEnriched;
+        stopFailed = unlistenFailed;
+      })
+      .catch((listenError) => setError(errorMessage(listenError)));
+
+    return () => {
+      disposed = true;
+      stopEnriched?.();
+      stopFailed?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    setDraftTitle(selected?.title ?? "");
+    setDraftDescription(selected?.description ?? "");
     setDraftNote(selected?.note ?? "");
     setDraftTags(selected?.tags.join(", ") ?? "");
-  }, [selectedId, selected?.note, selected?.tags]);
+  }, [selectedId]);
 
-  async function capture(mode: CaptureMode) {
+  async function registerShortcutBindings(settings: ShortcutSettings) {
+    const entries = (["area", "screen"] as CaptureMode[]).filter(
+      (mode) => settings[mode].enabled,
+    );
+
+    for (const mode of entries) {
+      await register(shortcutAccelerator(settings[mode]), (event: ShortcutEvent) => {
+        if (event.state === "Pressed") void captureRef.current(mode, "shortcut");
+      });
+    }
+  }
+
+  async function saveShortcutSettings() {
+    const next = cloneShortcuts(draftShortcuts);
+    const enabled = (["area", "screen"] as CaptureMode[])
+      .filter((mode) => next[mode].enabled)
+      .map((mode) => shortcutAccelerator(next[mode]));
+
+    if (new Set(enabled).size !== enabled.length) {
+      setError("Area capture and full screen cannot use the same shortcut.");
+      return;
+    }
+
+    setSavingShortcuts(true);
+    setError(null);
+    const previous = cloneShortcuts(shortcutSettingsRef.current);
+
+    try {
+      await queueShortcutOperation(async () => {
+        await unregisterAll();
+        try {
+          await registerShortcutBindings(next);
+        } catch (shortcutError) {
+          await unregisterAll().catch(() => undefined);
+          await registerShortcutBindings(previous).catch(() => undefined);
+          throw shortcutError;
+        }
+      });
+      localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(next));
+      shortcutSettingsRef.current = next;
+      setShortcutSettings(next);
+      setDraftShortcuts(cloneShortcuts(next));
+      setNotice("Global shortcuts updated.");
+    } catch (shortcutError) {
+      setError(
+        `Could not register those shortcuts. Another app may already use one: ${errorMessage(shortcutError)}`,
+      );
+    } finally {
+      setSavingShortcuts(false);
+    }
+  }
+
+  function updateDraftShortcut(mode: CaptureMode, binding: ShortcutBinding) {
+    setDraftShortcuts((current) => ({ ...current, [mode]: binding }));
+  }
+
+  async function chooseStorageLocation() {
+    if (!isTauriRuntime) {
+      setNotice("Storage folders can be changed in the desktop app.");
+      return;
+    }
+
+    let selected: string | string[] | null;
+    try {
+      selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: storageLocation || undefined,
+        title: "Choose screenshot storage folder",
+      });
+    } catch (dialogError) {
+      setError(errorMessage(dialogError));
+      return;
+    }
+    if (typeof selected !== "string") return;
+
+    setChangingStorage(true);
+    setError(null);
+    try {
+      const updated = await invoke<StorageLocationUpdate>("set_storage_location", {
+        path: selected,
+      });
+      setStorageLocation(updated.path);
+      setCaptures(updated.captures);
+      setNotice(
+        updated.captures.length > 0
+          ? `Storage moved. ${updated.captures.length} ${updated.captures.length === 1 ? "capture" : "captures"} migrated.`
+          : "Screenshot storage location updated.",
+      );
+    } catch (storageError) {
+      setError(errorMessage(storageError));
+    } finally {
+      setChangingStorage(false);
+    }
+  }
+
+  async function capture(mode: CaptureMode, trigger: "button" | "shortcut" = "button") {
     if (!isTauriRuntime) {
       setNotice("Screen capture is available in the desktop app.");
       return;
     }
+    if (captureInProgressRef.current) return;
 
+    captureInProgressRef.current = true;
     setCapturing(mode);
     setError(null);
     const appWindow = getCurrentWindow();
+    let wasVisible = true;
 
     try {
+      wasVisible = await appWindow.isVisible();
       await appWindow.hide();
       await new Promise((resolve) => window.setTimeout(resolve, 180));
       const created = await invoke<CaptureRecord>("capture_screen", { mode });
@@ -140,11 +522,14 @@ function App() {
       const message = errorMessage(captureError);
       if (!message.toLowerCase().includes("cancel")) setError(message);
     } finally {
-      await appWindow.show();
-      await appWindow.setFocus();
+      if (wasVisible) await appWindow.show();
+      if (trigger === "button") await appWindow.setFocus();
+      captureInProgressRef.current = false;
       setCapturing(null);
     }
   }
+
+  captureRef.current = capture;
 
   async function updateMetadata(
     capture: CaptureRecord,
@@ -157,6 +542,8 @@ function App() {
     try {
       const updated = await invoke<CaptureRecord>("update_capture_metadata", {
         id: capture.id,
+        title: draftTitle,
+        description: draftDescription,
         note: draftNote,
         tags: draftTags.split(","),
         favorite,
@@ -165,6 +552,7 @@ function App() {
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
       setNotice(favorite !== capture.favorite ? "Favorite updated." : "Details saved.");
+      setSelectedId(null);
     } catch (saveError) {
       setError(errorMessage(saveError));
     } finally {
@@ -178,6 +566,8 @@ function App() {
     try {
       const updated = await invoke<CaptureRecord>("update_capture_metadata", {
         id: capture.id,
+        title: capture.title,
+        description: capture.description,
         note: capture.note,
         tags: capture.tags,
         favorite: !capture.favorite,
@@ -189,6 +579,41 @@ function App() {
       setError(errorMessage(favoriteError));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function analyzeCapture(capture: CaptureRecord) {
+    if (!isTauriRuntime) return;
+
+    setAnalyzingId(capture.id);
+    setError(null);
+    setCaptures((current) =>
+      current.map((item) =>
+        item.id === capture.id ? { ...item, enrichmentStatus: "processing" } : item,
+      ),
+    );
+
+    try {
+      const updated = await invoke<CaptureRecord>("enrich_capture", { id: capture.id });
+      setCaptures((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setDraftTitle((current) => current || updated.title);
+      setDraftDescription((current) => current || updated.description);
+      setNotice(
+        updated.enrichmentStatus === "partial"
+          ? "OCR is searchable, but the local vision model was unavailable."
+          : "Semantic title, description, and searchable text are ready.",
+      );
+    } catch (analysisError) {
+      setCaptures((current) =>
+        current.map((item) =>
+          item.id === capture.id ? { ...item, enrichmentStatus: "failed" } : item,
+        ),
+      );
+      setError(errorMessage(analysisError));
+    } finally {
+      setAnalyzingId(null);
     }
   }
 
@@ -328,20 +753,37 @@ function App() {
 
         <nav className="library-nav" aria-label="Screenshot library">
           <button
-            className={filter === "all" ? "active" : ""}
-            onClick={() => setFilter("all")}
+            className={!settingsOpen && filter === "all" ? "active" : ""}
+            onClick={() => {
+              setFilter("all");
+              setSettingsOpen(false);
+            }}
           >
             <Icon name="grid" />
             Library
             <span>{captures.length}</span>
           </button>
           <button
-            className={filter === "favorites" ? "active" : ""}
-            onClick={() => setFilter("favorites")}
+            className={!settingsOpen && filter === "favorites" ? "active" : ""}
+            onClick={() => {
+              setFilter("favorites");
+              setSettingsOpen(false);
+            }}
           >
             <Icon name="star" />
             Favorites
             <span>{captures.filter((capture) => capture.favorite).length}</span>
+          </button>
+          <button
+            className={settingsOpen ? "active" : ""}
+            onClick={() => {
+              setDraftShortcuts(cloneShortcuts(shortcutSettingsRef.current));
+              setSelectedId(null);
+              setSettingsOpen(true);
+            }}
+          >
+            <Icon name="settings" />
+            Settings
           </button>
         </nav>
 
@@ -349,21 +791,23 @@ function App() {
           <Icon name="lock" size={18} />
           <div>
             <strong>Stored locally</strong>
-            <p>Your screenshots never leave this device.</p>
+            <p>Your screenshots stay local by default.</p>
           </div>
         </div>
 
-        <p className="version">Early preview · v0.1.2</p>
+        <p className="version">Early preview · v0.2.0</p>
       </aside>
 
       <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Screenshot library</p>
-            <h1>{filter === "all" ? "Your captures" : "Favorites"}</h1>
+            <p className="eyebrow">{settingsOpen ? "Preferences" : "Screenshot library"}</p>
+            <h1>
+              {settingsOpen ? "Settings" : filter === "all" ? "Your captures" : "Favorites"}
+            </h1>
           </div>
 
-          <div className="capture-actions">
+          {!settingsOpen && <div className="capture-actions">
             <button
               className="secondary-action"
               onClick={() => void capture("screen")}
@@ -371,6 +815,9 @@ function App() {
             >
               <Icon name="monitor" />
               {capturing === "screen" ? "Capturing…" : "Full screen"}
+              {shortcutSettings.screen.enabled && (
+                <kbd className="button-shortcut">{shortcutLabel(shortcutSettings.screen)}</kbd>
+              )}
             </button>
             <button
               className="primary-action"
@@ -379,17 +826,20 @@ function App() {
             >
               <Icon name="crop" />
               {capturing === "area" ? "Select an area…" : "Capture area"}
+              {shortcutSettings.area.enabled && (
+                <kbd className="button-shortcut">{shortcutLabel(shortcutSettings.area)}</kbd>
+              )}
             </button>
-          </div>
+          </div>}
         </header>
 
-        <section className="library-toolbar" aria-label="Library controls">
+        {!settingsOpen && <section className="library-toolbar" aria-label="Library controls">
           <label className="search-box">
             <Icon name="search" size={18} />
             <input
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder="Search notes, tags, and captures"
+              placeholder="Search titles, OCR text, notes, and tags"
               aria-label="Search captures"
             />
             {query && (
@@ -407,7 +857,7 @@ function App() {
               {visibleCaptures.length} {visibleCaptures.length === 1 ? "capture" : "captures"}
             </span>
           </div>
-        </section>
+        </section>}
 
         {error && (
           <div className="message error-message" role="alert">
@@ -429,7 +879,103 @@ function App() {
           </div>
         )}
 
-        {loading ? (
+        {settingsOpen ? (
+          <section className="settings-page" aria-labelledby="settings-title">
+            <div className="settings-intro">
+              <span className="settings-icon" aria-hidden="true">
+                <Icon name="settings" size={22} />
+              </span>
+              <div>
+                <h2 id="settings-title">CaptureVault preferences</h2>
+                <p>
+                  Manage where screenshots are kept and how captures are started from any app.
+                </p>
+              </div>
+            </div>
+
+            <h3 className="settings-section-title">Storage</h3>
+            <div className="settings-card storage-setting">
+              <span className="storage-setting-icon" aria-hidden="true">
+                <Icon name="folder" size={20} />
+              </span>
+              <div className="storage-setting-copy">
+                <strong>Screenshot folder</strong>
+                <p>Existing images are moved when you choose a new folder.</p>
+                <code title={storageLocation}>
+                  {storageLocation || "Available in the desktop app"}
+                </code>
+              </div>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={changingStorage}
+                onClick={() => void chooseStorageLocation()}
+              >
+                {changingStorage ? "Moving…" : "Choose folder"}
+              </button>
+            </div>
+
+            <h3 className="settings-section-title">Optional vision analysis</h3>
+            <div className="settings-card storage-setting">
+              <span className="storage-setting-icon" aria-hidden="true">
+                <Icon name="sparkles" size={20} />
+              </span>
+              <div className="storage-setting-copy">
+                <strong>Off by default</strong>
+                <p>
+                  OCR always runs on this device. To opt in to generated titles and descriptions,
+                  launch CaptureVault with this setting and only use a local service you trust.
+                </p>
+                <code>CAPTURE_VAULT_ENABLE_VISION=1</code>
+              </div>
+            </div>
+
+            <h3 className="settings-section-title">Global shortcuts</h3>
+
+            <div className="settings-card">
+              <ShortcutEditor
+                label="Capture an area"
+                description="Choose a region using the secure desktop capture picker."
+                value={draftShortcuts.area}
+                onChange={(binding) => updateDraftShortcut("area", binding)}
+              />
+              <ShortcutEditor
+                label="Capture full screen"
+                description="Capture the full display without opening CaptureVault first."
+                value={draftShortcuts.screen}
+                onChange={(binding) => updateDraftShortcut("screen", binding)}
+              />
+            </div>
+
+            <div className="settings-note">
+              <Icon name="lock" size={17} />
+              <p>
+                Shortcuts are registered only while CaptureVault is running. Ubuntu may reserve
+                some combinations for system actions.
+              </p>
+            </div>
+
+            <div className="settings-actions">
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={savingShortcuts}
+                onClick={() => setDraftShortcuts(cloneShortcuts(DEFAULT_SHORTCUTS))}
+              >
+                Restore defaults
+              </button>
+              <button
+                className="primary-action"
+                type="button"
+                disabled={savingShortcuts}
+                onClick={() => void saveShortcutSettings()}
+              >
+                <Icon name="check" size={17} />
+                {savingShortcuts ? "Applying…" : "Save shortcuts"}
+              </button>
+            </div>
+          </section>
+        ) : loading ? (
           <div className="loading-grid" aria-label="Loading captures">
             {Array.from({ length: 6 }).map((_, index) => (
               <div className="loading-card" key={index} />
@@ -459,12 +1005,12 @@ function App() {
                 onPointerCancel={endDragGesture}
                 tabIndex={0}
                 aria-describedby="capture-transfer-instructions"
-                aria-label={`${capture.note || fileName(capture.filePath)}, screenshot`}
+                aria-label={`${captureLabel(capture)}, screenshot`}
               >
                 <div className="capture-preview">
                   <img
                     src={imageSource(capture)}
-                    alt={capture.note || "Screenshot"}
+                    alt={capture.title || capture.description || capture.note || "Screenshot"}
                     draggable={false}
                   />
                   <button
@@ -494,6 +1040,12 @@ function App() {
                   <span className="mode-pill">
                     {capture.captureMode === "area" ? "Area" : "Screen"}
                   </span>
+                  {capture.enrichmentStatus === "processing" && (
+                    <span className="enrichment-pill">
+                      <Icon name="sparkles" size={13} />
+                      Analyzing
+                    </span>
+                  )}
                   <span className="drag-hint" aria-hidden="true">
                     <Icon name="grip" size={14} />
                     {draggingId === capture.id ? "Dragging…" : "Drag to share"}
@@ -501,13 +1053,16 @@ function App() {
                 </div>
                 <div className="capture-card-copy">
                   <div>
-                    <strong>{capture.note || fileName(capture.filePath)}</strong>
+                    <strong>{captureLabel(capture)}</strong>
                     <span>{formatCaptureDate(capture.createdAt)}</span>
                   </div>
                   <span className="dimensions">
                     {capture.width} × {capture.height}
                   </span>
                 </div>
+                {capture.description && (
+                  <p className="capture-card-description">{capture.description}</p>
+                )}
                 {capture.tags.length > 0 && (
                   <div className="tag-row">
                     {capture.tags.slice(0, 3).map((tag) => (
@@ -538,7 +1093,7 @@ function App() {
             </h2>
             <p>
               {query
-                ? "Search looks through filenames, notes, tags, and capture types."
+                ? "Search looks through titles, descriptions, OCR text, notes, tags, and filenames."
                 : "Choose an area or a full display. Your screenshot will appear here automatically."}
             </p>
             {!query && filter === "all" && (
@@ -583,7 +1138,7 @@ function App() {
               <img
                 className="detail-image"
                 src={imageSource(selected)}
-                alt={selected.note || "Selected screenshot"}
+                alt={selected.title || selected.description || selected.note || "Selected screenshot"}
                 draggable={false}
               />
               <span className="detail-drag-hint" aria-hidden="true">
@@ -620,6 +1175,72 @@ function App() {
               </div>
             </dl>
 
+            <section className="enrichment-card" aria-label="Local screenshot analysis">
+              <div className="enrichment-card-copy">
+                <span className={`enrichment-icon ${selected.enrichmentStatus}`}>
+                  <Icon name="sparkles" size={18} />
+                </span>
+                <div>
+                  <strong>{enrichmentLabel(selected.enrichmentStatus)}</strong>
+                  <p>
+                    OCR runs on this device. Optional vision analysis only runs after you opt in;
+                    re-analysis never replaces your note or edits.
+                  </p>
+                </div>
+              </div>
+              <button
+                className="secondary-action compact-action"
+                type="button"
+                disabled={
+                  selected.enrichmentStatus === "processing" || analyzingId === selected.id
+                }
+                onClick={() => void analyzeCapture(selected)}
+              >
+                <Icon name="sparkles" size={16} />
+                {selected.enrichmentStatus === "complete" ||
+                selected.enrichmentStatus === "no_text"
+                  ? "Re-analyze"
+                  : selected.enrichmentStatus === "processing"
+                    ? "Analyzing…"
+                    : "Analyze"}
+              </button>
+            </section>
+
+            <label className="field">
+              <span>Title</span>
+              <input
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.currentTarget.value)}
+                placeholder="A clear name for this screenshot"
+                maxLength={140}
+              />
+              <small>Optional vision suggestion after you explicitly opt in.</small>
+            </label>
+
+            <label className="field">
+              <span>Description</span>
+              <textarea
+                value={draftDescription}
+                onChange={(event) => setDraftDescription(event.currentTarget.value)}
+                placeholder="What is shown in this screenshot?"
+                rows={3}
+              />
+              <small>Optional vision suggestion based on the image’s interface and context.</small>
+            </label>
+
+            {selected.ocrText && (
+              <details className="ocr-details">
+                <summary>
+                  <span>
+                    <Icon name="text" size={16} />
+                    Detected text
+                  </span>
+                  <span>{selected.ocrText.length.toLocaleString()} characters</span>
+                </summary>
+                <pre>{selected.ocrText}</pre>
+              </details>
+            )}
+
             <label className="field">
               <span>Note</span>
               <textarea
@@ -628,6 +1249,7 @@ function App() {
                 placeholder="Why did you save this?"
                 rows={4}
               />
+              <small>Your personal context. Local analysis never changes it.</small>
             </label>
 
             <label className="field">

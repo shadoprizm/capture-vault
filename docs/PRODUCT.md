@@ -2,7 +2,7 @@
 
 ## Vision
 
-CaptureVault turns screenshots from disposable files into a dependable personal reference library while keeping the entire workflow on the user's device.
+CaptureVault turns screenshots from disposable files into a dependable personal reference library while keeping the default workflow on the user's device.
 
 ## Primary user
 
@@ -13,7 +13,7 @@ Someone who regularly captures visual information for research, design, troubles
 1. Capture a specific area without interrupting the current task.
 2. Capture a complete display when context matters.
 3. Confirm that the capture was saved.
-4. Find a previous screenshot using its date, note, tag, or visual thumbnail.
+4. Find a previous screenshot using its title, description, visible text, note, tag, date, or visual thumbnail.
 5. Copy or drag a saved screenshot directly into another app or folder.
 6. Remove screenshots that are no longer needed.
 
@@ -36,9 +36,24 @@ Someone who regularly captures visual information for research, design, troubles
 - Browser extensions
 - Automatic capture based on activity
 
+## Version 0.2 scope
+
+- Configurable global shortcuts for area and full-screen capture
+- Automatic, on-device OCR after every new capture
+- Explicitly opt-in semantic title and description suggestions based on the whole image
+- Full detected text in capture details and library search
+- Re-analysis that preserves personal notes and manual edits
+- In-place migration of existing version 0.1 libraries
+
+## Explicit non-goals for 0.2
+
+- Uploading captures to a hosted vision model
+- Guaranteed recognition outside the Latin alphabet
+- Automatic tags or actions based on screenshot content
+
 ## Product principles
 
-- **Private by default:** no capture leaves the device without an explicit export action.
+- **Private by default:** no capture leaves CaptureVault without an explicit export action or explicit opt-in to a local vision service.
 - **Fast to trust:** saving is atomic and the capture appears in the library immediately.
 - **Respect the desktop:** use compositor and operating-system permission surfaces.
 - **Portable core:** platform-specific capture code stays behind a narrow adapter.
@@ -51,6 +66,8 @@ Someone who regularly captures visual information for research, design, troubles
 - Relaunching the application restores the library.
 - Notes, tags, and favorite state persist.
 - Search filters the local library without network access.
+- Newly captured screenshots receive local OCR without blocking capture or transfer; optional vision analysis runs only after explicit opt-in.
+- Re-running enrichment does not overwrite personal notes or edited titles and descriptions.
 - Copy publishes both image data and the saved PNG file for inline pasting and file attachments.
 - Dragging a capture starts a native copy operation that can drop the PNG into another app or folder.
 - Deletion removes both the image and database row after confirmation.

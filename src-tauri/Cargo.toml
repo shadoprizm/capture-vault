@@ -1,6 +1,6 @@
 [package]
 name = "capture-vault"
-version = "0.1.2"
+version = "0.2.0"
 description = "A private, local-first screenshot library"
 authors = ["CaptureVault contributors"]
 edition = "2024"
@@ -22,10 +22,16 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-drag = "2.1.1"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2.3.2"
 chrono = { version = "0.4", features = ["serde"] }
 clipboard-rs = { version = "0.3.5", features = ["wayland"] }
+base64 = "0.23.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
+ocrs = { version = "0.13.1", default-features = false, features = ["rten"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
+rten = { version = "0.26.0", default-features = false, features = ["mmap", "rten_format"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -34,6 +40,17 @@ uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "screenshot"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# SCScreenshotManager is available on macOS 14.0 and later. Keeping this
+# target-specific prevents the Swift bridge from affecting Linux and Windows.
+screencapturekit = { version = "10.0.3", features = ["macos_14_0"] }
+tempfile = "3"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Uses Windows.Graphics.Capture and the Win32 IGraphicsCaptureItemInterop API.
+windows-capture = "2.0.1"
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3"

@@ -19,6 +19,13 @@ dist-ssr
 *.sqlite3
 captures/
 
+# Local Snapcraft build state and artifacts
+.craft/
+parts/
+stage/
+prime/
+*.snap
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
