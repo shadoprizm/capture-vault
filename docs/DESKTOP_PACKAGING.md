@@ -5,7 +5,7 @@ macOS. It keeps generated bundles as GitHub Actions artifacts for 14 days and
 does not publish a release.
 
 `release-linux.yml` publishes tagged Linux prereleases. `release-macos.yml`
-builds an Apple Silicon DMG on a native `macos-15` runner, validates its code
+builds an Apple Silicon DMG on a native `macos-26` runner, validates its code
 signature, generates a SHA-256 checksum, and uploads both files to the matching
 GitHub prerelease.
 

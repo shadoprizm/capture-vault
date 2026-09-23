@@ -23,7 +23,7 @@ jobs:
             runner: windows-latest
             artifact: windows
           - label: macOS Apple Silicon
-            runner: macos-15
+            runner: macos-26
             artifact: macos
 
     steps:
