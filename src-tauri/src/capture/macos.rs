@@ -1,10 +1,11 @@
-//! ScreenCaptureKit implementation for full-display still captures.
+//! Native macOS screen capture.
 //!
 //! `SCScreenshotManager` provides a genuine single-frame capture on macOS 14+
-//! without creating a recording stream. It has no arbitrary region-selection
-//! UI, so `CaptureMode::Area` intentionally reports an actionable error.
+//! without creating a recording stream. Area capture delegates only the
+//! selection interaction to macOS' built-in `screencapture` picker, which keeps
+//! the familiar crosshair, Escape-to-cancel behavior, and multi-display support.
 
-use std::fs;
+use std::{fs, process::Command};
 
 use screencapturekit::{
     screenshot_manager::{CGImageExt, SCScreenshotManager},
@@ -32,9 +33,14 @@ impl CaptureProvider for MacOsCaptureProvider {
                             "the ScreenCaptureKit worker stopped unexpectedly: {error}"
                         ),
                     })?,
-                CaptureMode::Area => {
-                    Err(CaptureError::AreaSelectionUnavailable { platform: "macOS" })
-                }
+                CaptureMode::Area => tauri::async_runtime::spawn_blocking(capture_selected_area)
+                    .await
+                    .map_err(|error| CaptureError::Native {
+                        platform: "macOS",
+                        message: format!(
+                            "the native area-selection worker stopped unexpectedly: {error}"
+                        ),
+                    })?,
             }
         })
     }
@@ -42,10 +48,12 @@ impl CaptureProvider for MacOsCaptureProvider {
 
 fn capture_first_display() -> Result<CapturedImage, CaptureError> {
     let content = SCShareableContent::get().map_err(native_error)?;
-    let display = content
-        .displays()
-        .into_iter()
-        .next()
+    let displays = content.displays();
+    let main_display_id = main_display_id();
+    let display = displays
+        .iter()
+        .find(|display| display.display_id() == main_display_id)
+        .or_else(|| displays.first())
         .ok_or(CaptureError::NoDisplay { platform: "macOS" })?;
 
     let filter = SCContentFilter::create()
@@ -87,6 +95,57 @@ fn capture_first_display() -> Result<CapturedImage, CaptureError> {
     }
 
     Ok(CapturedImage::from_temporary(path))
+}
+
+fn capture_selected_area() -> Result<CapturedImage, CaptureError> {
+    capture_with_screencapture(&["-i", "-s", "-x", "-t", "png"], true)
+}
+
+#[cfg(debug_assertions)]
+pub(super) fn capture_test_area() -> Result<CapturedImage, CaptureError> {
+    capture_with_screencapture(&["-R0,0,256,256", "-x", "-t", "png"], false)
+}
+
+fn capture_with_screencapture(
+    arguments: &[&str],
+    empty_output_is_cancelled: bool,
+) -> Result<CapturedImage, CaptureError> {
+    let path = temporary_png_path()?;
+    let status = Command::new("/usr/sbin/screencapture")
+        .args(arguments)
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|error| CaptureError::Native {
+            platform: "macOS",
+            message: format!("could not launch the macOS area picker: {error}"),
+        })?;
+
+    let captured = status.success()
+        && fs::metadata(path.to_path_buf())
+            .map(|metadata| metadata.len() > 0)
+            .unwrap_or(false);
+
+    if captured {
+        Ok(CapturedImage::from_temporary(path))
+    } else if status.success() && empty_output_is_cancelled {
+        Err(CaptureError::Cancelled)
+    } else {
+        Err(CaptureError::Native {
+            platform: "macOS",
+            message: format!("the macOS area picker exited with {status}"),
+        })
+    }
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+unsafe extern "C" {
+    fn CGMainDisplayID() -> u32;
+}
+
+fn main_display_id() -> u32 {
+    // SAFETY: CGMainDisplayID takes no arguments and returns the active main
+    // display's stable CoreGraphics identifier.
+    unsafe { CGMainDisplayID() }
 }
 
 fn native_error(error: impl std::fmt::Display) -> CaptureError {

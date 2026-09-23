@@ -33,7 +33,7 @@ pub(crate) type CaptureFuture =
 /// Narrow boundary between platform screen-capture APIs and the shared app.
 ///
 /// Providers must return a valid PNG path. A provider-created temporary file is
-/// held by [`CapturedImage`] and removed after CaptureVault imports it. Paths
+/// held by [`CapturedImage`] and removed after CaptureRecall imports it. Paths
 /// returned by an operating-system portal remain owned by that portal.
 pub(crate) trait CaptureProvider: Send + Sync {
     fn capture(&self, mode: CaptureMode) -> CaptureFuture;
@@ -52,6 +52,7 @@ pub(crate) struct CapturedImage {
 }
 
 impl CapturedImage {
+    #[cfg(any(target_os = "linux", test))]
     pub(crate) fn from_portal(path: PathBuf) -> Self {
         Self {
             path,
@@ -75,20 +76,25 @@ impl CapturedImage {
 
 #[derive(Debug, Error)]
 pub enum CaptureError {
+    #[cfg(target_os = "macos")]
+    #[error("Screenshot cancelled")]
+    Cancelled,
+    #[cfg(any(target_os = "linux", test))]
     #[error("The screenshot request failed: {0}")]
     Portal(String),
+    #[cfg(any(target_os = "linux", test))]
     #[error("The screenshot portal returned an invalid file location: {0}")]
     InvalidLocation(String),
     #[cfg(target_os = "macos")]
     #[error("No display is available for screen capture on {platform}")]
     NoDisplay { platform: &'static str },
-    #[cfg(any(target_os = "macos", target_os = "windows", test))]
+    #[cfg(any(target_os = "windows", test))]
     #[error(
-        "CaptureVault cannot capture a selected area on {platform} yet. Use full-display capture instead."
+        "CaptureRecall cannot capture a selected area on {platform} yet. Use full-display capture instead."
     )]
     AreaSelectionUnavailable { platform: &'static str },
     #[cfg(any(target_os = "macos", target_os = "windows", test))]
-    #[error("CaptureVault could not create a temporary screenshot file: {source}")]
+    #[error("CaptureRecall could not create a temporary screenshot file: {source}")]
     TemporaryFile {
         #[source]
         source: std::io::Error,
@@ -110,7 +116,7 @@ pub enum CaptureError {
 #[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(super) fn temporary_png_path() -> Result<TempPath, CaptureError> {
     tempfile::Builder::new()
-        .prefix("capture-vault-")
+        .prefix("capture-recall-")
         .suffix(".png")
         .tempfile()
         .map(|file| file.into_temp_path())
@@ -144,6 +150,25 @@ fn active_provider() -> &'static dyn CaptureProvider {
 
 pub async fn take_screenshot(mode: CaptureMode) -> Result<CapturedImage, CaptureError> {
     active_provider().capture(mode).await
+}
+
+#[cfg(all(target_os = "macos", debug_assertions))]
+pub async fn run_native_smoke_test(output_dir: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(output_dir).map_err(|error| error.to_string())?;
+
+    let screen = take_screenshot(CaptureMode::Screen)
+        .await
+        .map_err(|error| error.to_string())?;
+    std::fs::copy(screen.path(), output_dir.join("screen.png"))
+        .map_err(|error| error.to_string())?;
+
+    let area = tauri::async_runtime::spawn_blocking(macos::capture_test_area)
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    std::fs::copy(area.path(), output_dir.join("area.png")).map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -184,7 +209,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "CaptureVault cannot capture a selected area on Windows yet. Use full-display capture instead."
+            "CaptureRecall cannot capture a selected area on Windows yet. Use full-display capture instead."
         );
     }
 

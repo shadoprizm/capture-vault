@@ -189,6 +189,8 @@ select:focus-visible {
   gap: 24px;
 }
 
+.mobile-nav { display: none; }
+
 .eyebrow {
   margin: 0 0 3px;
   color: #7a8074;
@@ -1125,6 +1127,36 @@ h1 { font-size: clamp(25px, 3vw, 34px); }
   .sidebar { display: none; }
   .workspace { height: auto; min-height: 100vh; padding: 24px 18px 40px; }
   .topbar { align-items: flex-start; flex-direction: column; }
+  .mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 20px 0;
+    padding: 5px;
+    background: #e9ece4;
+    border-radius: 11px;
+  }
+  .mobile-nav button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 8px;
+    color: #697064;
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .mobile-nav button.active {
+    color: #28331f;
+    background: #fff;
+    box-shadow: 0 2px 7px rgba(40, 45, 37, 0.08);
+  }
   .capture-actions { width: 100%; }
   .capture-actions button { flex: 1; }
   .button-shortcut { display: none; }

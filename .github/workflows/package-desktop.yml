@@ -1,7 +1,7 @@
 name: Package desktop installers (manual)
 
 # This is intentionally build-only. It never creates a GitHub Release or uploads
-# assets publicly: native capture is currently supported only on Linux.
+# assets publicly; release workflows own signing and publication.
 on:
   workflow_dispatch:
 
@@ -22,8 +22,8 @@ jobs:
           - label: Windows
             runner: windows-latest
             artifact: windows
-          - label: macOS
-            runner: macos-latest
+          - label: macOS Apple Silicon
+            runner: macos-15
             artifact: macos
 
     steps:
@@ -65,6 +65,8 @@ jobs:
         run: npm ci
 
       - name: Build native Tauri bundles
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         run: npm run tauri build
 
       # `bundle.targets: "all"` controls the concrete formats. This uploads every

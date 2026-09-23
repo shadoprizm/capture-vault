@@ -746,7 +746,7 @@ function App() {
             <Icon name="focus" size={22} />
           </div>
           <div>
-            <strong>CaptureVault</strong>
+            <strong>CaptureRecall</strong>
             <span>Private by default</span>
           </div>
         </div>
@@ -795,7 +795,7 @@ function App() {
           </div>
         </div>
 
-        <p className="version">Early preview · v0.2.0</p>
+        <p className="version">Mac preview · v0.3.0</p>
       </aside>
 
       <main className="workspace">
@@ -832,6 +832,40 @@ function App() {
             </button>
           </div>}
         </header>
+
+        <nav className="mobile-nav" aria-label="Screenshot library">
+          <button
+            className={!settingsOpen && filter === "all" ? "active" : ""}
+            onClick={() => {
+              setFilter("all");
+              setSettingsOpen(false);
+            }}
+          >
+            <Icon name="grid" size={17} />
+            Library
+          </button>
+          <button
+            className={!settingsOpen && filter === "favorites" ? "active" : ""}
+            onClick={() => {
+              setFilter("favorites");
+              setSettingsOpen(false);
+            }}
+          >
+            <Icon name="star" size={17} />
+            Favorites
+          </button>
+          <button
+            className={settingsOpen ? "active" : ""}
+            onClick={() => {
+              setDraftShortcuts(cloneShortcuts(shortcutSettingsRef.current));
+              setSelectedId(null);
+              setSettingsOpen(true);
+            }}
+          >
+            <Icon name="settings" size={17} />
+            Settings
+          </button>
+        </nav>
 
         {!settingsOpen && <section className="library-toolbar" aria-label="Library controls">
           <label className="search-box">
@@ -886,7 +920,7 @@ function App() {
                 <Icon name="settings" size={22} />
               </span>
               <div>
-                <h2 id="settings-title">CaptureVault preferences</h2>
+                <h2 id="settings-title">CaptureRecall preferences</h2>
                 <p>
                   Manage where screenshots are kept and how captures are started from any app.
                 </p>
@@ -924,7 +958,7 @@ function App() {
                 <strong>Off by default</strong>
                 <p>
                   OCR always runs on this device. To opt in to generated titles and descriptions,
-                  launch CaptureVault with this setting and only use a local service you trust.
+                  launch CaptureRecall with this setting and only use a local service you trust.
                 </p>
                 <code>CAPTURE_VAULT_ENABLE_VISION=1</code>
               </div>
@@ -941,7 +975,7 @@ function App() {
               />
               <ShortcutEditor
                 label="Capture full screen"
-                description="Capture the full display without opening CaptureVault first."
+                description="Capture the full display without opening CaptureRecall first."
                 value={draftShortcuts.screen}
                 onChange={(binding) => updateDraftShortcut("screen", binding)}
               />
@@ -950,7 +984,7 @@ function App() {
             <div className="settings-note">
               <Icon name="lock" size={17} />
               <p>
-                Shortcuts are registered only while CaptureVault is running. Ubuntu may reserve
+                Shortcuts are registered only while CaptureRecall is running. Ubuntu may reserve
                 some combinations for system actions.
               </p>
             </div>

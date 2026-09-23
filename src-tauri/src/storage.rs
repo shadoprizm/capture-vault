@@ -15,15 +15,15 @@ use crate::models::{CaptureMode, CaptureRecord};
 
 #[derive(Debug, Error)]
 pub enum StorageError {
-    #[error("Could not access CaptureVault storage: {0}")]
+    #[error("Could not access CaptureRecall storage: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Could not update the CaptureVault database: {0}")]
+    #[error("Could not update the CaptureRecall database: {0}")]
     Database(#[from] rusqlite::Error),
     #[error("Could not read screenshot dimensions: {0}")]
     Image(#[from] image::ImageError),
     #[error("Could not encode screenshot tags: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("This CaptureVault library uses unsupported database version {0}")]
+    #[error("This CaptureRecall library uses unsupported database version {0}")]
     UnsupportedVersion(i64),
     #[error("Capture {0} was not found")]
     NotFound(String),
@@ -31,7 +31,7 @@ pub enum StorageError {
     InvalidStorageLocation,
     #[error("The destination already contains a file named {0}")]
     DestinationConflict(String),
-    #[error("CaptureVault could not access its active storage location")]
+    #[error("CaptureRecall could not access its active storage location")]
     StorageLock,
 }
 
@@ -55,6 +55,9 @@ pub struct CaptureStore {
 impl CaptureStore {
     pub fn new(root: PathBuf) -> Result<Self, StorageError> {
         fs::create_dir_all(&root)?;
+        // Normalize platform aliases (notably macOS' /var -> /private/var)
+        // before paths are persisted or compared during library migration.
+        let root = root.canonicalize()?;
         let settings_path = root.join("storage-settings.json");
         let settings = if settings_path.exists() {
             serde_json::from_slice(&fs::read(&settings_path)?)?
@@ -64,7 +67,14 @@ impl CaptureStore {
         let captures_dir = settings
             .image_directory
             .unwrap_or_else(|| root.join("captures"));
-        fs::create_dir_all(&captures_dir)?;
+        // `create_dir_all` can return EEXIST for a directory symlink whose
+        // target is on another mounted filesystem. Existing directory links
+        // are valid storage locations, so only create the path when it does
+        // not already resolve to a directory.
+        if !captures_dir.is_dir() {
+            fs::create_dir_all(&captures_dir)?;
+        }
+        let captures_dir = captures_dir.canonicalize()?;
 
         let store = Self {
             database_path: root.join("capture-vault.sqlite3"),
@@ -383,11 +393,16 @@ impl CaptureStore {
             .captures_dir
             .read()
             .map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let stored_path = captures_dir.join(filename);
+        // Asset protocol checks resolve symlinks before matching their scope.
+        // Returning the canonical path keeps the generated preview URL and
+        // the registered scope aligned when the library is on a mounted drive.
+        let file_path = stored_path.canonicalize().unwrap_or(stored_path);
 
         Ok(CaptureRecord {
             id: row.get(0)?,
             created_at: row.get(1)?,
-            file_path: captures_dir.join(filename).to_string_lossy().into_owned(),
+            file_path: file_path.to_string_lossy().into_owned(),
             width: row.get(3)?,
             height: row.get(4)?,
             capture_mode: row.get(5)?,
@@ -604,6 +619,34 @@ mod tests {
         assert!(!Path::new(&capture.file_path).exists());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn resolves_capture_paths_through_a_symlinked_library() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempdir().expect("temporary directory");
+        let root = directory.path().join("library");
+        let external = directory.path().join("mounted-captures");
+        fs::create_dir_all(&root).expect("create library root");
+        fs::create_dir_all(&external).expect("create external capture directory");
+        symlink(&external, root.join("captures")).expect("link capture directory");
+
+        let source = directory.path().join("source.png");
+        sample_png(&source);
+        let store = CaptureStore::new(root).expect("create store");
+        let capture = store
+            .import_capture(&source, CaptureMode::Area)
+            .expect("import capture");
+
+        assert!(
+            Path::new(&capture.file_path).starts_with(
+                external
+                    .canonicalize()
+                    .expect("canonical external directory")
+            )
+        );
+    }
+
     #[test]
     fn changes_storage_location_and_uses_it_after_restart() {
         let directory = tempdir().expect("temporary directory");
@@ -619,9 +662,10 @@ mod tests {
         let moved = store
             .set_storage_location(destination.clone())
             .expect("change storage location");
+        let canonical_destination = destination.canonicalize().expect("canonical destination");
 
         assert_eq!(moved.len(), 1);
-        assert!(Path::new(&moved[0].file_path).starts_with(&destination));
+        assert!(Path::new(&moved[0].file_path).starts_with(&canonical_destination));
         assert!(Path::new(&moved[0].file_path).exists());
         assert!(!Path::new(&original.file_path).exists());
 
@@ -629,12 +673,12 @@ mod tests {
         let reopened = CaptureStore::new(library).expect("reopen store");
         assert_eq!(
             reopened.storage_location().expect("read storage location"),
-            destination.canonicalize().expect("canonical destination")
+            canonical_destination
         );
         let new_capture = reopened
             .import_capture(&source, CaptureMode::Screen)
             .expect("import into selected location");
-        assert!(Path::new(&new_capture.file_path).starts_with(&destination));
+        assert!(Path::new(&new_capture.file_path).starts_with(&canonical_destination));
     }
 
     #[test]
@@ -673,8 +717,9 @@ mod tests {
         });
 
         let captures = store.list().expect("list migrated captures");
+        let canonical_destination = destination.canonicalize().expect("canonical destination");
         assert_eq!(captures.len(), 1);
-        assert!(Path::new(&captures[0].file_path).starts_with(&destination));
+        assert!(Path::new(&captures[0].file_path).starts_with(&canonical_destination));
         assert!(Path::new(&captures[0].file_path).exists());
     }
 

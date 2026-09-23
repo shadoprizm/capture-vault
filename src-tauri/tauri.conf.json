@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CaptureVault",
-  "version": "0.2.0",
+  "productName": "CaptureRecall",
+  "version": "0.3.0",
   "identifier": "io.github.shadoprizm.capturevault",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "CaptureVault",
+        "title": "CaptureRecall",
         "width": 1180,
         "height": 760,
         "minWidth": 860,
@@ -46,7 +46,8 @@
     ],
     "macOS": {
       "minimumSystemVersion": "14.0",
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "hardenedRuntime": true
     }
   }
 }

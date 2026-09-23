@@ -1,8 +1,8 @@
 [package]
 name = "capture-vault"
-version = "0.2.0"
+version = "0.3.0"
 description = "A private, local-first screenshot library"
-authors = ["CaptureVault contributors"]
+authors = ["CaptureRecall contributors"]
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/shadoprizm/capture-vault"

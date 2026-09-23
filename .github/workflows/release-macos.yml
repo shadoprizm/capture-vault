@@ -1,0 +1,141 @@
+name: Build and publish macOS preview
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload the DMG to the matching GitHub prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: Apple Silicon DMG
+    runs-on: macos-15
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Verify version and architecture
+        run: |
+          expected="v$(node -p 'require("./package.json").version')"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "$expected" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $expected" >&2
+            exit 1
+          fi
+          test "$(uname -m)" = "arm64"
+
+      - name: Import Developer ID certificate when configured
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CONFIGURED_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          if [[ -z "$APPLE_CERTIFICATE" ]]; then
+            echo "No Developer ID certificate configured; producing an ad-hoc preview."
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "MAC_RELEASE_CHANNEL=Ad-hoc signed Apple Silicon preview" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [[ -z "$CONFIGURED_SIGNING_IDENTITY" ]]; then
+            echo "APPLE_SIGNING_IDENTITY must be set with APPLE_CERTIFICATE" >&2
+            exit 1
+          fi
+          if [[ -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+            echo "APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID are required for notarization" >&2
+            exit 1
+          fi
+
+          certificate_path="$RUNNER_TEMP/capture-recall.p12"
+          keychain_path="$RUNNER_TEMP/capture-recall.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychain -d user -s "$keychain_path" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$keychain_path"
+          echo "APPLE_SIGNING_IDENTITY=$CONFIGURED_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "MAC_RELEASE_CHANNEL=Developer ID signed and notarized Apple Silicon preview" >> "$GITHUB_ENV"
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build DMG
+        run: npm run tauri build -- --bundles app,dmg
+
+      - name: Validate bundle and signature
+        run: |
+          app=$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)
+          dmg=$(find src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)
+          test -n "$app" && test -n "$dmg"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=4 "$app" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+          if [[ "$APPLE_SIGNING_IDENTITY" != "-" ]]; then
+            xcrun stapler validate "$app"
+            xcrun stapler validate "$dmg"
+            spctl --assess --type execute --verbose=4 "$app"
+            spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          fi
+
+      - name: Generate checksum
+        run: |
+          cd src-tauri/target/release/bundle/dmg
+          shasum -a 256 *.dmg > CaptureRecall_macOS_arm64_SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CaptureRecall-macOS-arm64
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/dmg/*SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload GitHub prerelease assets
+        if: github.ref_type == 'tag' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "CaptureRecall $tag" \
+              --prerelease \
+              --notes "$MAC_RELEASE_CHANNEL. Requires macOS 14 or newer. Capture and OCR remain local by default."
+          fi
+          gh release upload "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            src-tauri/target/release/bundle/dmg/*.dmg \
+            src-tauri/target/release/bundle/dmg/*SHA256SUMS.txt

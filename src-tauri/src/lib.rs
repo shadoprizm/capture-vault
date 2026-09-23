@@ -198,6 +198,7 @@ fn copy_capture(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let clipboard = ClipboardContext::new()
         .map_err(|error| format!("Could not access the system clipboard: {error}"))?;
 
+    #[allow(unused_mut)]
     let mut contents = vec![
         ClipboardContent::Files(vec![capture.file_path.clone()]),
         ClipboardContent::Image(image),
@@ -227,8 +228,13 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let store = CaptureStore::new(data_dir)?;
+            // The configured library may be reached through a symlink (for
+            // example, when captures live on a mounted drive). Register the
+            // resolved directory with the asset protocol so WebKit can load
+            // the same canonical paths returned to the frontend.
+            let preview_directory = store.storage_location()?.canonicalize()?;
             app.asset_protocol_scope()
-                .allow_directory(store.storage_location()?, false)?;
+                .allow_directory(preview_directory, false)?;
             let detection_model = app.path().resolve(
                 "resources/ocr/text-detection-ssfbcj81.rten",
                 BaseDirectory::Resource,
@@ -241,7 +247,7 @@ pub fn run() {
                 match EnrichmentEngine::load(&detection_model, &recognition_model) {
                     Ok(engine) => (Some(Arc::new(engine)), None),
                     Err(error) => {
-                        eprintln!("CaptureVault local analysis is unavailable: {error}");
+                        eprintln!("CaptureRecall local analysis is unavailable: {error}");
                         (None, Some(error))
                     }
                 };
@@ -250,6 +256,29 @@ pub fn run() {
                 enrichment,
                 enrichment_error,
             });
+
+            #[cfg(all(target_os = "macos", debug_assertions))]
+            if let Some(output_dir) = std::env::args().find_map(|argument| {
+                argument
+                    .strip_prefix("--capture-recall-smoke=")
+                    .map(PathBuf::from)
+            }) {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.hide()?;
+                }
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    let result = capture::run_native_smoke_test(&output_dir).await;
+                    let report = match &result {
+                        Ok(()) => "ok\n".to_owned(),
+                        Err(error) => format!("error: {error}\n"),
+                    };
+                    let _ = std::fs::create_dir_all(&output_dir);
+                    let _ = std::fs::write(output_dir.join("result.txt"), report);
+                    handle.exit(if result.is_ok() { 0 } else { 1 });
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

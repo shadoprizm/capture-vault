@@ -3,6 +3,8 @@
 <plist version="1.0">
 <dict>
   <key>NSScreenCaptureUsageDescription</key>
-  <string>CaptureVault captures a screen only when you ask it to save a private screenshot to your local library.</string>
+  <string>CaptureRecall captures your screen only when you ask it to save a private screenshot to your local library.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 CaptureRecall contributors</string>
 </dict>
 </plist>

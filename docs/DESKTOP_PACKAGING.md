@@ -1,32 +1,32 @@
-# Manual desktop packaging
+# Desktop packaging
 
-`package-desktop.yml` is a manually dispatched GitHub Actions workflow for
-native package builds. It runs one build each on Ubuntu, Windows, and macOS,
-then keeps the generated files as GitHub Actions workflow artifacts for 14
-days. Start it from **Actions → Package desktop installers (manual) → Run
-workflow**.
+`package-desktop.yml` is the manual integration build for Ubuntu, Windows, and
+macOS. It keeps generated bundles as GitHub Actions artifacts for 14 days and
+does not publish a release.
 
-The workflow runs the project-pinned Tauri CLI with `npm run tauri build`.
-CaptureVault's Tauri configuration uses `bundle.targets: "all"`, so a runner
-uploads every bundle Tauri actually produces. That normally includes Linux
-AppImage, Debian, and RPM bundles; Windows MSI and NSIS EXE installers; and
-macOS `.app` and DMG bundles. The precise formats and CPU architecture remain
-the native runner's output rather than a CI assumption.
+`release-linux.yml` publishes tagged Linux prereleases. `release-macos.yml`
+builds an Apple Silicon DMG on a native `macos-15` runner, validates its code
+signature, generates a SHA-256 checksum, and uploads both files to the matching
+GitHub prerelease.
 
-## Deliberate release boundary
+## macOS signing modes
 
-This workflow does **not** create a GitHub Release, tag a version, upload
-release assets, or publish to a package marketplace. It is an integration and
-packaging check only.
+The Mac release workflow supports two modes:
 
-CaptureVault's native screen-capture implementation currently relies on the
-Linux XDG Desktop Portal. The Windows and macOS artifacts are therefore not
-supported public applications yet, even if their bundles build successfully.
-They are useful for detecting platform build issues while the Windows Graphics
-Capture and macOS ScreenCaptureKit adapters are implemented.
+- With `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
+  `KEYCHAIN_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and Apple notarization
+  credentials configured as repository secrets, Tauri signs, notarizes, and
+  staples the direct-download build.
+- Without those secrets, the workflow uses ad-hoc signing and labels the output
+  as an internal preview. Ad-hoc output is installable for testing but is not a
+  Gatekeeper-approved public release.
 
-Before publishing any non-Linux desktop installer, complete the corresponding
-native capture support, test the resulting application on that platform, and
-add the appropriate Windows code-signing and macOS signing/notarization
-release process. Until then, treat downloaded workflow artifacts as internal
-test builds.
+For notarization, configure either App Store Connect API credentials
+(`APPLE_API_ISSUER`, `APPLE_API_KEY`, and the `.p8` key) or the Apple ID flow
+documented by Tauri. The certificate must be **Developer ID Application**;
+Apple Development and Apple Distribution certificates cannot notarize a
+direct-download DMG.
+
+The app keeps hardened runtime enabled and its long-lived bundle identifier.
+Do not change the identifier solely for the CaptureRecall rename because that
+would create a new macOS permission identity and application-data directory.
