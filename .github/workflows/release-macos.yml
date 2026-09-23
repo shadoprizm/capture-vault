@@ -18,10 +18,6 @@ jobs:
   macos:
     name: Apple Silicon DMG
     runs-on: macos-26
-    env:
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
     steps:
       - uses: actions/checkout@v7
@@ -54,6 +50,9 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           CONFIGURED_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          CONFIGURED_APPLE_ID: ${{ secrets.APPLE_ID }}
+          CONFIGURED_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          CONFIGURED_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [[ -z "$APPLE_CERTIFICATE" ]]; then
             echo "No Developer ID certificate configured; producing an ad-hoc preview."
@@ -66,7 +65,7 @@ jobs:
             echo "APPLE_SIGNING_IDENTITY must be set with APPLE_CERTIFICATE" >&2
             exit 1
           fi
-          if [[ -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+          if [[ -z "$CONFIGURED_APPLE_ID" || -z "$CONFIGURED_APPLE_PASSWORD" || -z "$CONFIGURED_APPLE_TEAM_ID" ]]; then
             echo "APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID are required for notarization" >&2
             exit 1
           fi
@@ -81,6 +80,9 @@ jobs:
           security list-keychain -d user -s "$keychain_path" login.keychain-db
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$keychain_path"
           echo "APPLE_SIGNING_IDENTITY=$CONFIGURED_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "APPLE_ID=$CONFIGURED_APPLE_ID" >> "$GITHUB_ENV"
+          echo "APPLE_PASSWORD=$CONFIGURED_APPLE_PASSWORD" >> "$GITHUB_ENV"
+          echo "APPLE_TEAM_ID=$CONFIGURED_APPLE_TEAM_ID" >> "$GITHUB_ENV"
           echo "MAC_RELEASE_CHANNEL=Developer ID signed and notarized Apple Silicon preview" >> "$GITHUB_ENV"
 
       - run: npm ci
