@@ -10,8 +10,6 @@
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "drag:default",
-    "dialog:allow-open",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister-all"
+    "dialog:allow-open"
   ]
 }

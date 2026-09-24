@@ -1,18 +1,24 @@
 mod capture;
 mod enrichment;
 mod models;
+mod shortcuts;
 mod storage;
 
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
 };
 
 use clipboard_rs::{
     Clipboard, ClipboardContent, ClipboardContext, RustImageData, common::RustImage,
 };
-use enrichment::EnrichmentEngine;
+use enrichment::{EnrichmentEngine, VisionSettings};
 use models::{CaptureMode, CaptureRecord};
+use shortcuts::{ShortcutRegistry, ShortcutSettings};
 use storage::CaptureStore;
 use tauri::{AppHandle, Emitter, Manager, State, path::BaseDirectory};
 
@@ -23,10 +29,67 @@ struct StorageLocationUpdate {
     captures: Vec<CaptureRecord>,
 }
 
+#[derive(Clone)]
 struct AppState {
     store: CaptureStore,
     enrichment: Option<Arc<EnrichmentEngine>>,
     enrichment_error: Option<String>,
+    capture_active: Arc<AtomicBool>,
+    shortcuts: Arc<ShortcutRegistry>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnalysisSettings {
+    ocr_available: bool,
+    ocr_error: Option<String>,
+    vision: VisionSettings,
+    vision_error: Option<String>,
+}
+
+#[tauri::command]
+fn get_analysis_settings(state: State<'_, AppState>) -> Result<AnalysisSettings, String> {
+    Ok(AnalysisSettings {
+        ocr_available: state.enrichment.is_some(),
+        ocr_error: state.enrichment_error.clone(),
+        vision_error: state
+            .enrichment
+            .as_ref()
+            .and_then(|engine| engine.vision_error()),
+        vision: match &state.enrichment {
+            Some(engine) => engine.vision_settings()?,
+            None => VisionSettings::default(),
+        },
+    })
+}
+
+#[tauri::command]
+fn set_vision_settings(
+    settings: VisionSettings,
+    state: State<'_, AppState>,
+) -> Result<VisionSettings, String> {
+    state
+        .enrichment
+        .as_ref()
+        .ok_or_else(|| {
+            state
+                .enrichment_error
+                .clone()
+                .unwrap_or_else(|| "Local OCR is unavailable".into())
+        })?
+        .update_vision_settings(settings)
+}
+
+#[tauri::command]
+async fn configure_shortcuts(
+    settings: ShortcutSettings,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let registry = state.shortcuts.clone();
+    tauri::async_runtime::spawn_blocking(move || registry.configure(&app, settings))
+        .await
+        .map_err(|error| format!("Shortcut registration stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
@@ -78,6 +141,27 @@ async fn capture_screen(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<CaptureRecord, String> {
+    capture_and_import(mode, app, state.inner().clone()).await
+}
+
+struct CaptureGuard(Arc<AtomicBool>);
+
+impl Drop for CaptureGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+async fn capture_and_import(
+    mode: CaptureMode,
+    app: AppHandle,
+    state: AppState,
+) -> Result<CaptureRecord, String> {
+    state
+        .capture_active
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .map_err(|_| "A capture is already in progress".to_owned())?;
+    let _guard = CaptureGuard(state.capture_active.clone());
     let source = capture::take_screenshot(mode)
         .await
         .map_err(|error| error.to_string())?;
@@ -115,6 +199,41 @@ async fn capture_screen(
             .set_enrichment_status(&created.id, "failed")
             .map_err(|error| error.to_string())
     }
+}
+
+fn start_shortcut_capture(app: &AppHandle, mode: CaptureMode) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>().inner().clone();
+        if state.capture_active.load(Ordering::Acquire) {
+            return;
+        }
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        let visible = window.is_visible().unwrap_or(false);
+        if visible && window.hide().is_err() {
+            return;
+        }
+        tauri::async_runtime::spawn_blocking(|| std::thread::sleep(Duration::from_millis(180)))
+            .await
+            .ok();
+        let result = capture_and_import(mode, app.clone(), state).await;
+        if visible {
+            let _ = window.show();
+        }
+        match result {
+            Ok(capture) => {
+                let _ = app.emit("capture-created", capture);
+            }
+            Err(error)
+                if error != "A capture is already in progress" && !error.contains("cancel") =>
+            {
+                let _ = app.emit("capture-failed", error);
+            }
+            Err(_) => {}
+        }
+    });
 }
 
 #[tauri::command]
@@ -227,7 +346,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
-            let store = CaptureStore::new(data_dir)?;
+            let store = CaptureStore::new(data_dir.clone())?;
             // The configured library may be reached through a symlink (for
             // example, when captures live on a mounted drive). Register the
             // resolved directory with the asset protocol so WebKit can load
@@ -243,18 +362,23 @@ pub fn run() {
                 "resources/ocr/text-rec-checkpoint-s52qdbqt.rten",
                 BaseDirectory::Resource,
             )?;
-            let (enrichment, enrichment_error) =
-                match EnrichmentEngine::load(&detection_model, &recognition_model) {
-                    Ok(engine) => (Some(Arc::new(engine)), None),
-                    Err(error) => {
-                        eprintln!("CaptureRecall local analysis is unavailable: {error}");
-                        (None, Some(error))
-                    }
-                };
+            let (enrichment, enrichment_error) = match EnrichmentEngine::load(
+                &detection_model,
+                &recognition_model,
+                data_dir.join("vision-settings.json"),
+            ) {
+                Ok(engine) => (Some(Arc::new(engine)), None),
+                Err(error) => {
+                    eprintln!("CaptureRecall local analysis is unavailable: {error}");
+                    (None, Some(error))
+                }
+            };
             app.manage(AppState {
                 store,
                 enrichment,
                 enrichment_error,
+                capture_active: Arc::new(AtomicBool::new(false)),
+                shortcuts: Arc::new(ShortcutRegistry::default()),
             });
 
             #[cfg(all(target_os = "macos", debug_assertions))]
@@ -284,6 +408,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_captures,
             get_storage_location,
+            get_analysis_settings,
+            set_vision_settings,
+            configure_shortcuts,
             set_storage_location,
             capture_screen,
             update_capture_metadata,

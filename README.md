@@ -20,12 +20,12 @@ product rename.
 
 ## Download for macOS
 
-CaptureRecall v0.3.0 adds an Apple Silicon preview for macOS 14 or newer. It
+CaptureRecall v0.3.1 supports Apple Silicon Macs running macOS 14 or newer. It
 captures the main display with ScreenCaptureKit and selected regions with the
 native macOS crosshair picker. The app hides itself before capture, runs OCR on
 device, and keeps the library local by default.
 
-[Download the latest macOS DMG](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.0).
+[Download the latest macOS DMG](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.1).
 
 The current preview is ad-hoc signed while the project awaits a Developer ID
 Application certificate. macOS may require approval from **System Settings →
@@ -35,27 +35,27 @@ the required certificate and credentials are configured.
 
 ## Download for Linux
 
-CaptureRecall v0.2.0 is an x86_64 Linux prerelease. Choose the package that fits
-your desktop, or visit the [full v0.2.0 release](https://github.com/shadoprizm/capture-vault/releases/tag/v0.2.0)
+CaptureRecall v0.3.1 is an x86_64 Linux prerelease. Choose the package that fits
+your desktop, or visit the [full v0.3.1 release](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.1)
 for its RPM package and SHA-256 checksums.
 
 ### Ubuntu or Debian
 
-[Download the `.deb` installer](https://github.com/shadoprizm/capture-vault/releases/download/v0.2.0/CaptureVault_0.2.0_amd64.deb),
+[Download the `.deb` installer](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.1/CaptureRecall_0.3.1_amd64.deb),
 then run this from the directory containing the downloaded file:
 
 ```bash
-sudo apt install ./CaptureVault_0.2.0_amd64.deb
+sudo apt install ./CaptureRecall_0.3.1_amd64.deb
 ```
 
 ### Portable Linux build
 
-[Download the AppImage](https://github.com/shadoprizm/capture-vault/releases/download/v0.2.0/CaptureVault_0.2.0_amd64.AppImage),
+[Download the AppImage](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.1/CaptureRecall_0.3.1_amd64.AppImage),
 make it executable, and launch it:
 
 ```bash
-chmod +x CaptureVault_0.2.0_amd64.AppImage
-./CaptureVault_0.2.0_amd64.AppImage
+chmod +x CaptureRecall_0.3.1_amd64.AppImage
+./CaptureRecall_0.3.1_amd64.AppImage
 ```
 
 ## Compatibility and support status
@@ -87,6 +87,12 @@ chmod +x CaptureVault_0.2.0_amd64.AppImage
 - Selected-area capture through the native macOS crosshair picker, including Escape to cancel
 - Hardened-runtime release configuration and repeatable Developer ID/notarization workflow
 - Native macOS CI and regression coverage for Swift runtime linkage and canonical file paths
+
+### New in v0.3.1
+
+- Clearer macOS Screen Recording permission errors and more reliable selected-area imports
+- Native global shortcuts that keep working while the app window is hidden
+- In-app OCR status and optional AI titles and descriptions, with a saved service and model choice
 
 ### New in v0.2.0
 
@@ -133,21 +139,24 @@ The browser-only interface preview is available with `npm run dev`, but screen c
 
 ## Optional semantic metadata
 
-OCR runs locally by default. Whole-image semantic titles and descriptions are
-**off by default** and require an explicit opt-in:
-
-```bash
-CAPTURE_VAULT_ENABLE_VISION=1 npm run tauri dev
-```
+OCR runs locally for every new capture. In **Settings → Image analysis**, you
+can opt in to AI-generated titles and descriptions, enter a service URL
+and model name, and save the choice without restarting the app. The choice is
+off by default and is kept in the application's local data folder. Existing
+captures can be analyzed again from their detail view.
 
 When enabled, CaptureRecall sends the complete image to an OpenAI-compatible
 service at `http://127.0.0.1:8083/v1/chat/completions` and uses
-`Gemma 4 26B-A4B - Fast General` by default. Override these values with
-`CAPTURE_VAULT_VISION_ENDPOINT` and `CAPTURE_VAULT_VISION_MODEL`. The endpoint
+`Gemma 4 26B-A4B - Fast General` by default. These are starting values for a
+compatible service, which must be running separately. The endpoint
 must remain on `127.0.0.1`, `localhost`, or `::1`; remote endpoints and HTTP
-redirects are rejected. Setting an endpoint alone does not enable vision.
+redirects are rejected. A local SSH tunnel can forward this loopback endpoint
+to a trusted service on another computer; in that case, the complete image
+travels over the tunnel to that computer. The old `CAPTURE_VAULT_ENABLE_VISION`,
+`CAPTURE_VAULT_VISION_ENDPOINT`, and `CAPTURE_VAULT_VISION_MODEL` variables
+still provide initial values for development when no saved choice exists.
 
-Only opt in when you trust the local service: CaptureRecall cannot prevent that
+Only opt in when you trust the receiving service: CaptureRecall cannot prevent that
 separate service from relaying data after it receives a capture. If it is off
 or unavailable, OCR remains searchable and CaptureRecall leaves semantic
 metadata untouched rather than manufacturing a title from detected text.
@@ -165,12 +174,12 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 CaptureRecall stores screenshots and its SQLite index in the operating system's application-data directory. By default, it does not upload screenshots or include analytics.
 
-In v0.2.0, OCR runs from bundled local models. Optional
-semantic analysis is disabled unless you explicitly set
-`CAPTURE_VAULT_ENABLE_VISION=1`; then the whole image is sent to the configured
-loopback service. CaptureRecall rejects non-loopback endpoints and redirects,
-but cannot control what that separate local service does after receiving the
-capture. The bundled OCR model currently targets Latin-alphabet text.
+OCR runs from bundled local models. Optional semantic analysis is disabled
+unless you enable it in Settings; then the whole image is sent to the
+configured loopback endpoint. An SSH tunnel can forward the image to another
+computer. CaptureRecall rejects non-loopback endpoints and redirects, but
+cannot control what the receiving service does after it gets the capture.
+The bundled OCR model currently targets Latin-alphabet text.
 Screenshots can contain sensitive information; review a capture before sharing
 it outside the application.
 

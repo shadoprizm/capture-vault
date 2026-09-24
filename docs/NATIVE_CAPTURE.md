@@ -17,7 +17,9 @@ the displays returned by ScreenCaptureKit and captures one frame with
 `SCScreenshotManager`. Area capture launches macOS' built-in interactive
 selection surface in selection-only mode. The app window is hidden before
 either provider runs. Press Escape to cancel area selection without creating a
-library item.
+library item. The app checks its effective Screen Recording permission before
+launching the picker. If macOS still denies access while the Settings switch
+appears on, turn that switch off and on, then fully quit and reopen CaptureRecall.
 
 Native providers write into a private temporary file held by `CapturedImage`.
 The file is removed automatically after the shared store imports it, including
