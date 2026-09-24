@@ -25,11 +25,11 @@ Rust core
 
 ## Capture flow
 
-1. A capture starts from an interface button or a registered global shortcut. Shortcut choices are validated, registered through Tauri, and persisted in local application storage.
+1. A capture starts from an interface button or a registered global shortcut. Shortcut choices are validated and persisted in local application storage. The native process registers them so a hidden webview is not needed to handle a shortcut.
 2. The React window hides so it is not included in the screenshot. A shortcut-triggered capture preserves the window's previous visibility instead of bringing a hidden window forward.
-3. The frontend invokes `capture_screen` with `area` or `screen`.
+3. The frontend invokes `capture_screen` with `area` or `screen` for buttons. The native shortcut handler uses the same import path and emits the new record to the interface.
 4. The active platform provider requests a screenshot: Linux uses `org.freedesktop.portal.Screenshot`; macOS uses ScreenCaptureKit; and Windows uses Windows Graphics Capture.
-5. Portal version 3 receives an explicit target. Older Linux portals fall back to the interactive behavior. macOS and Windows currently support only the full-display path and return an explicit error for area selection.
+5. Portal version 3 receives an explicit target. Older Linux portals fall back to the interactive behavior. macOS uses its built-in crosshair picker for area selection; Windows currently returns an explicit error for area selection.
 6. The returned or provider-created PNG is validated and imported into CaptureVault storage.
 7. Provider-created temporary PNGs are removed after import; portal output remains portal-owned.
 8. The file is copied to a temporary name and atomically renamed.
@@ -40,8 +40,8 @@ Rust core
 ## Enrichment flow
 
 - The `ocrs` engine memory-maps its immutable RTen detection and recognition models from bundled application resources once at startup.
-- OCR always runs on a blocking worker. Vision inference runs alongside OCR only after `CAPTURE_VAULT_ENABLE_VISION=1` explicitly opts in; OCR access is serialized so rapid captures do not compete for CPU and memory.
-- Opted-in semantic metadata comes from the local OpenAI-compatible multimodal service at `127.0.0.1:8083` using `Gemma 4 26B-A4B - Fast General` by default. Environment variables can select another loopback endpoint and model; non-loopback URLs are rejected and HTTP redirects are never followed.
+- OCR always runs on a blocking worker. Vision inference runs alongside OCR only after the user enables it in Settings; OCR access is serialized so rapid captures do not compete for CPU and memory.
+- Opted-in semantic metadata comes from a local OpenAI-compatible multimodal service. The Settings screen stores the loopback endpoint and model; non-loopback URLs are rejected and HTTP redirects are never followed.
 - The opted-in vision model receives the complete image and a strict JSON schema. Its prompt asks for the screen's application, activity, and purpose—not copied OCR—and treats all text inside the image as untrusted content rather than instructions. CaptureVault cannot control whether a separately run local service relays that image after receiving it.
 - Raw detected text is stored separately from the title, description, and personal note so all visible text is searchable.
 - The database tracks whether a title or description has been edited. Re-analysis can replace an earlier generated suggestion but preserves user edits and never touches notes.

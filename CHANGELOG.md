@@ -2,6 +2,17 @@
 
 All notable changes to CaptureVault are documented here.
 
+## 0.3.1 — 2026-09-24
+
+- Check CaptureRecall's actual macOS Screen Recording access before capture and
+  explain how to refresh a stale permission entry.
+- Import a completed area screenshot even if the macOS picker returns a
+  nonzero exit status, and treat an empty cancelled selection as cancellation.
+- Handle global shortcuts in the native app process so captures can start while
+  the interface is hidden.
+- Show the bundled OCR status and provide saved, in-app controls for a trusted
+  local vision service that generates titles and descriptions.
+
 ## 0.2.0 — 2026-09-21
 
 This is a Linux prerelease. Windows and macOS capture adapters are experimental

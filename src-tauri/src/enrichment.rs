@@ -1,10 +1,15 @@
-use std::{env, fs, path::Path, sync::Mutex, time::Duration};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    sync::{Mutex, RwLock},
+    time::Duration,
+};
 
 use base64::prelude::*;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem, TextLine};
 use reqwest::{blocking::Client, redirect::Policy};
 use rten::Model;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const DEFAULT_VISION_ENDPOINT: &str = "http://127.0.0.1:8083/v1/chat/completions";
@@ -25,10 +30,37 @@ pub struct EnrichmentResult {
 
 pub struct EnrichmentEngine {
     ocr: Mutex<OcrEngine>,
-    vision: Option<VisionClient>,
-    vision_error: Option<String>,
+    vision: RwLock<VisionState>,
+    settings_path: PathBuf,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisionSettings {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub model: String,
+}
+
+impl Default for VisionSettings {
+    fn default() -> Self {
+        Self {
+            enabled: vision_is_enabled(),
+            endpoint: env::var("CAPTURE_VAULT_VISION_ENDPOINT")
+                .unwrap_or_else(|_| DEFAULT_VISION_ENDPOINT.to_owned()),
+            model: env::var("CAPTURE_VAULT_VISION_MODEL")
+                .unwrap_or_else(|_| DEFAULT_VISION_MODEL.to_owned()),
+        }
+    }
+}
+
+struct VisionState {
+    settings: VisionSettings,
+    client: Option<VisionClient>,
+    error: Option<String>,
+}
+
+#[derive(Clone)]
 struct VisionClient {
     endpoint: String,
     model: String,
@@ -57,7 +89,11 @@ struct ChatMessage {
 }
 
 impl EnrichmentEngine {
-    pub fn load(detection_model: &Path, recognition_model: &Path) -> Result<Self, String> {
+    pub fn load(
+        detection_model: &Path,
+        recognition_model: &Path,
+        settings_path: PathBuf,
+    ) -> Result<Self, String> {
         // Application resources are immutable while CaptureVault is running, which makes
         // memory-mapping safe and avoids copying model weights into private process memory.
         let detection_model = unsafe { Model::load_mmap(detection_model) }
@@ -71,30 +107,98 @@ impl EnrichmentEngine {
         })
         .map_err(|error| format!("Could not initialize the OCR engine: {error}"))?;
 
-        let (vision, vision_error) = if vision_is_enabled() {
-            match VisionClient::new() {
-                Ok(client) => (Some(client), None),
+        let (settings, settings_error): (VisionSettings, Option<String>) = if settings_path.exists()
+        {
+            match fs::read(&settings_path)
+                .map_err(|error| error.to_string())
+                .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|error| error.to_string()))
+            {
+                Ok(settings) => (settings, None),
+                Err(error) => (
+                    VisionSettings {
+                        enabled: false,
+                        ..VisionSettings::default()
+                    },
+                    Some(format!("Could not read saved vision settings: {error}")),
+                ),
+            }
+        } else {
+            (VisionSettings::default(), None)
+        };
+        let (client, error) = if settings.enabled {
+            match VisionClient::new(&settings) {
+                Ok(client) => (Some(client), settings_error),
                 Err(error) => (None, Some(error)),
             }
         } else {
-            (
-                None,
-                Some(
-                    "Optional vision analysis is disabled. Set CAPTURE_VAULT_ENABLE_VISION=1 to opt in."
-                        .into(),
-                ),
-            )
+            (None, settings_error)
         };
 
         Ok(Self {
             ocr: Mutex::new(ocr),
-            vision,
-            vision_error,
+            vision: RwLock::new(VisionState {
+                settings,
+                client,
+                error,
+            }),
+            settings_path,
         })
     }
 
+    pub fn vision_settings(&self) -> Result<VisionSettings, String> {
+        self.vision
+            .read()
+            .map(|state| state.settings.clone())
+            .map_err(|_| "Could not read vision settings".into())
+    }
+
+    pub fn vision_error(&self) -> Option<String> {
+        self.vision
+            .read()
+            .ok()
+            .and_then(|state| state.error.clone())
+    }
+
+    pub fn update_vision_settings(
+        &self,
+        settings: VisionSettings,
+    ) -> Result<VisionSettings, String> {
+        let settings = VisionSettings {
+            enabled: settings.enabled,
+            endpoint: settings.endpoint.trim().to_owned(),
+            model: settings.model.trim().to_owned(),
+        };
+        if settings.model.is_empty() {
+            return Err("Enter the model name served by your local vision service".into());
+        }
+        // Validate even while disabled, so enabling later cannot silently use a remote URL.
+        validate_local_endpoint(&settings.endpoint)?;
+        let client = if settings.enabled {
+            Some(VisionClient::new(&settings)?)
+        } else {
+            None
+        };
+        let serialized = serde_json::to_vec_pretty(&settings).map_err(|error| error.to_string())?;
+        let mut state = self
+            .vision
+            .write()
+            .map_err(|_| "Could not update vision settings")?;
+        fs::write(&self.settings_path, serialized)
+            .map_err(|error| format!("Could not save vision settings: {error}"))?;
+        state.settings = settings.clone();
+        state.client = client;
+        state.error = None;
+        Ok(settings)
+    }
+
     pub fn analyze(&self, image_path: &Path) -> Result<EnrichmentResult, String> {
-        let (ocr_result, vision_result) = if let Some(vision) = self.vision.as_ref() {
+        let vision = self
+            .vision
+            .read()
+            .map_err(|_| "Could not read vision settings")?
+            .client
+            .clone();
+        let (ocr_result, vision_result) = if let Some(vision) = vision {
             std::thread::scope(|scope| {
                 let vision_task = scope.spawn(|| vision.analyze(image_path));
                 let ocr_result = self.extract_ocr(image_path);
@@ -107,10 +211,7 @@ impl EnrichmentEngine {
         } else {
             (
                 self.extract_ocr(image_path),
-                Err(self
-                    .vision_error
-                    .clone()
-                    .unwrap_or_else(|| "Optional vision analysis is unavailable".into())),
+                Err("Optional vision analysis is off".into()),
             )
         };
 
@@ -171,17 +272,13 @@ impl EnrichmentEngine {
 }
 
 impl VisionClient {
-    fn new() -> Result<Self, String> {
-        let endpoint = env::var("CAPTURE_VAULT_VISION_ENDPOINT")
-            .unwrap_or_else(|_| DEFAULT_VISION_ENDPOINT.to_owned());
-        validate_local_endpoint(&endpoint)?;
-        let model = env::var("CAPTURE_VAULT_VISION_MODEL")
-            .unwrap_or_else(|_| DEFAULT_VISION_MODEL.to_owned());
+    fn new(settings: &VisionSettings) -> Result<Self, String> {
+        validate_local_endpoint(&settings.endpoint)?;
         let http = local_http_client(Duration::from_secs(120))?;
 
         Ok(Self {
-            endpoint,
-            model,
+            endpoint: settings.endpoint.clone(),
+            model: settings.model.clone(),
             http,
         })
     }
@@ -460,9 +557,11 @@ mod tests {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let sample = env::var("CAPTURE_VAULT_OCR_SAMPLE")
             .expect("CAPTURE_VAULT_OCR_SAMPLE must point to a PNG");
+        let settings_dir = tempfile::tempdir().expect("create temporary settings folder");
         let engine = EnrichmentEngine::load(
             &manifest_dir.join("resources/ocr/text-detection-ssfbcj81.rten"),
             &manifest_dir.join("resources/ocr/text-rec-checkpoint-s52qdbqt.rten"),
+            settings_dir.path().join("vision-settings.json"),
         )
         .expect("load local analysis engines");
 
