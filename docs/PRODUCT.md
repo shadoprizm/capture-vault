@@ -53,7 +53,7 @@ Someone who regularly captures visual information for research, design, troubles
 
 ## Product principles
 
-- **Private by default:** no capture leaves CaptureVault without an explicit export action or explicit opt-in to a local vision service.
+- **Private by default:** no capture leaves CaptureVault without an explicit export action or explicit opt-in to a vision service. A loopback endpoint may forward to another computer through a user-configured tunnel.
 - **Fast to trust:** saving is atomic and the capture appears in the library immediately.
 - **Respect the desktop:** use compositor and operating-system permission surfaces.
 - **Portable core:** platform-specific capture code stays behind a narrow adapter.

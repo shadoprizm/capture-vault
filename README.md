@@ -133,8 +133,8 @@ The browser-only interface preview is available with `npm run dev`, but screen c
 
 ## Optional semantic metadata
 
-OCR runs locally for every new capture. In **Settings → Local analysis**, you
-can opt in to AI-generated titles and descriptions, enter a local service URL
+OCR runs locally for every new capture. In **Settings → Image analysis**, you
+can opt in to AI-generated titles and descriptions, enter a service URL
 and model name, and save the choice without restarting the app. The choice is
 off by default and is kept in the application's local data folder. Existing
 captures can be analyzed again from their detail view.
@@ -142,13 +142,15 @@ captures can be analyzed again from their detail view.
 When enabled, CaptureRecall sends the complete image to an OpenAI-compatible
 service at `http://127.0.0.1:8083/v1/chat/completions` and uses
 `Gemma 4 26B-A4B - Fast General` by default. These are starting values for a
-compatible local service, which must be running separately. The endpoint
+compatible service, which must be running separately. The endpoint
 must remain on `127.0.0.1`, `localhost`, or `::1`; remote endpoints and HTTP
-redirects are rejected. The old `CAPTURE_VAULT_ENABLE_VISION`,
+redirects are rejected. A local SSH tunnel can forward this loopback endpoint
+to a trusted service on another computer; in that case, the complete image
+travels over the tunnel to that computer. The old `CAPTURE_VAULT_ENABLE_VISION`,
 `CAPTURE_VAULT_VISION_ENDPOINT`, and `CAPTURE_VAULT_VISION_MODEL` variables
 still provide initial values for development when no saved choice exists.
 
-Only opt in when you trust the local service: CaptureRecall cannot prevent that
+Only opt in when you trust the receiving service: CaptureRecall cannot prevent that
 separate service from relaying data after it receives a capture. If it is off
 or unavailable, OCR remains searchable and CaptureRecall leaves semantic
 metadata untouched rather than manufacturing a title from detected text.
@@ -168,9 +170,10 @@ CaptureRecall stores screenshots and its SQLite index in the operating system's 
 
 OCR runs from bundled local models. Optional semantic analysis is disabled
 unless you enable it in Settings; then the whole image is sent to the
-configured loopback service. CaptureRecall rejects non-loopback endpoints and redirects,
-but cannot control what that separate local service does after receiving the
-capture. The bundled OCR model currently targets Latin-alphabet text.
+configured loopback endpoint. An SSH tunnel can forward the image to another
+computer. CaptureRecall rejects non-loopback endpoints and redirects, but
+cannot control what the receiving service does after it gets the capture.
+The bundled OCR model currently targets Latin-alphabet text.
 Screenshots can contain sensitive information; review a capture before sharing
 it outside the application.
 

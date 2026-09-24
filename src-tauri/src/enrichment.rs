@@ -169,7 +169,7 @@ impl EnrichmentEngine {
             model: settings.model.trim().to_owned(),
         };
         if settings.model.is_empty() {
-            return Err("Enter the model name served by your local vision service".into());
+            return Err("Enter the model name served by your vision service".into());
         }
         // Validate even while disabled, so enabling later cannot silently use a remote URL.
         validate_local_endpoint(&settings.endpoint)?;
@@ -204,7 +204,7 @@ impl EnrichmentEngine {
                 let ocr_result = self.extract_ocr(image_path);
                 let vision_result = vision_task
                     .join()
-                    .map_err(|_| "The local vision model stopped unexpectedly".to_owned())
+                    .map_err(|_| "The vision service stopped unexpectedly".to_owned())
                     .and_then(|result| result);
                 (ocr_result, vision_result)
             })
@@ -235,7 +235,7 @@ impl EnrichmentEngine {
                 status: "partial",
             }),
             (Err(ocr_error), Err(vision_error)) => Err(format!(
-                "Local analysis failed. OCR: {ocr_error} Vision AI: {vision_error}"
+                "Image analysis failed. OCR: {ocr_error} Vision AI: {vision_error}"
             )),
         }
     }
@@ -284,9 +284,8 @@ impl VisionClient {
     }
 
     fn analyze(&self, image_path: &Path) -> Result<VisionMetadata, String> {
-        let image = fs::read(image_path).map_err(|error| {
-            format!("Could not read the screenshot for local vision AI: {error}")
-        })?;
+        let image = fs::read(image_path)
+            .map_err(|error| format!("Could not read the screenshot for vision AI: {error}"))?;
         let image_url = format!("data:image/png;base64,{}", BASE64_STANDARD.encode(image));
         let request = json!({
             "model": self.model,
@@ -330,32 +329,31 @@ impl VisionClient {
             .post(&self.endpoint)
             .json(&request)
             .send()
-            .map_err(|error| format!("Could not reach the local vision model: {error}"))?
+            .map_err(|error| format!("Could not reach the vision service: {error}"))?
             .error_for_status()
-            .map_err(|error| format!("The local vision model rejected the image: {error}"))?
+            .map_err(|error| format!("The vision service rejected the image: {error}"))?
             .json::<ChatCompletion>()
-            .map_err(|error| format!("Could not read the local vision response: {error}"))?;
+            .map_err(|error| format!("Could not read the vision response: {error}"))?;
         let content = response
             .choices
             .first()
-            .ok_or_else(|| "The local vision model returned no result".to_owned())?
+            .ok_or_else(|| "The vision service returned no result".to_owned())?
             .message
             .content
             .trim();
-        let mut metadata: VisionMetadata = serde_json::from_str(content).map_err(|error| {
-            format!("The local vision model returned invalid metadata: {error}")
-        })?;
+        let mut metadata: VisionMetadata = serde_json::from_str(content)
+            .map_err(|error| format!("The vision service returned invalid metadata: {error}"))?;
         metadata.title = clean_metadata_field(&metadata.title, MAX_TITLE_CHARS);
         metadata.description = clean_metadata_field(&metadata.description, MAX_DESCRIPTION_CHARS);
 
         if metadata.title.is_empty() || metadata.description.is_empty() {
-            return Err("The local vision model returned incomplete metadata".into());
+            return Err("The vision service returned incomplete metadata".into());
         }
         Ok(metadata)
     }
 }
 
-/// Build the client that can carry a capture to the local vision service.
+/// Build the client that carries a capture to a loopback vision endpoint.
 ///
 /// Redirects are disabled rather than revalidated because a 307/308 redirect
 /// preserves the POST method and image body. Following one would let an
@@ -366,12 +364,12 @@ fn local_http_client(timeout: Duration) -> Result<Client, String> {
         .no_proxy()
         .redirect(Policy::none())
         .build()
-        .map_err(|error| format!("Could not initialize the local vision client: {error}"))
+        .map_err(|error| format!("Could not initialize the vision client: {error}"))
 }
 
 fn validate_local_endpoint(endpoint: &str) -> Result<(), String> {
     let url = url::Url::parse(endpoint)
-        .map_err(|error| format!("The local vision endpoint is invalid: {error}"))?;
+        .map_err(|error| format!("The vision endpoint is invalid: {error}"))?;
     let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
     if url.scheme() != "http" || !local {
         return Err(

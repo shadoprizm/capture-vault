@@ -41,8 +41,8 @@ Rust core
 
 - The `ocrs` engine memory-maps its immutable RTen detection and recognition models from bundled application resources once at startup.
 - OCR always runs on a blocking worker. Vision inference runs alongside OCR only after the user enables it in Settings; OCR access is serialized so rapid captures do not compete for CPU and memory.
-- Opted-in semantic metadata comes from a local OpenAI-compatible multimodal service. The Settings screen stores the loopback endpoint and model; non-loopback URLs are rejected and HTTP redirects are never followed.
-- The opted-in vision model receives the complete image and a strict JSON schema. Its prompt asks for the screen's application, activity, and purpose—not copied OCR—and treats all text inside the image as untrusted content rather than instructions. CaptureVault cannot control whether a separately run local service relays that image after receiving it.
+- Opted-in semantic metadata comes from an OpenAI-compatible multimodal service reached through a loopback endpoint. The Settings screen stores the endpoint and model; non-loopback URLs are rejected and HTTP redirects are never followed. A user-configured SSH tunnel can forward the loopback endpoint to a trusted computer.
+- The opted-in vision model receives the complete image and a strict JSON schema. Its prompt asks for the screen's application, activity, and purpose—not copied OCR—and treats all text inside the image as untrusted content rather than instructions. CaptureVault cannot control how the receiving service handles the image.
 - Raw detected text is stored separately from the title, description, and personal note so all visible text is searchable.
 - The database tracks whether a title or description has been edited. Re-analysis can replace an earlier generated suggestion but preserves user edits and never touches notes.
 - Records expose `pending`, `processing`, `complete`, `partial`, or `failed` status so the interface can distinguish searchable OCR from completed semantic analysis and offer a retry.
@@ -77,7 +77,7 @@ Images and metadata are deliberately separate:
 
 - The asset protocol is enabled only for the application-data directory.
 - The content security policy allows application assets and the Tauri local asset protocol only.
-- No remote image sources, telemetry, OCR API, or upload service are configured. OCR is local. Semantic vision is disabled by default; after explicit opt-in it is hard-limited to a loopback HTTP endpoint and refuses redirects, but the separately run local service is responsible for its own handling of received images.
+- No remote image sources, telemetry, OCR API, or upload service are configured. OCR is local. Semantic vision is disabled by default; after explicit opt-in it is hard-limited to a loopback HTTP endpoint and refuses redirects. A user-configured tunnel can forward images to another computer, whose service is responsible for handling them.
 - The XDG portal remains responsible for Wayland capture permissions and selection UI.
 
 ## Next architectural steps

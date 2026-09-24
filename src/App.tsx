@@ -619,7 +619,7 @@ function App() {
       setDraftDescription((current) => current || updated.description);
       setNotice(
         updated.enrichmentStatus === "partial"
-          ? "OCR is searchable, but the local vision model was unavailable."
+          ? "OCR is searchable, but the vision service was unavailable."
           : "Semantic title, description, and searchable text are ready.",
       );
     } catch (analysisError) {
@@ -966,7 +966,7 @@ function App() {
               </button>
             </div>
 
-            <h3 className="settings-section-title">Local analysis</h3>
+            <h3 className="settings-section-title">Image analysis</h3>
             <div className="settings-card analysis-setting">
               <span className="storage-setting-icon" aria-hidden="true">
                 <Icon name="sparkles" size={20} />
@@ -987,13 +987,13 @@ function App() {
                       ...current, enabled: event.currentTarget.checked,
                     })}
                   />
-                  Generate titles and descriptions with local AI
+                  Generate titles and descriptions with AI
                 </label>
-                <p>Optional. The complete image is sent only to the local service you choose. Keep it off if that service is not running or trusted.</p>
+                <p>Optional. The complete image is sent to the service at this address. A tunnel can forward it to another computer. Only use a service you trust.</p>
                 {analysisSettings?.visionError && <p className="analysis-error">{analysisSettings.visionError}</p>}
                 <div className="vision-fields">
                   <label>
-                    Local service URL
+                    Service URL on this Mac
                     <input
                       type="url"
                       value={draftVision?.endpoint ?? ""}
@@ -1346,7 +1346,7 @@ function App() {
                 placeholder="Why did you save this?"
                 rows={4}
               />
-              <small>Your personal context. Local analysis never changes it.</small>
+              <small>Your personal context. Automatic analysis never changes it.</small>
             </label>
 
             <label className="field">
