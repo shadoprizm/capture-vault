@@ -983,9 +983,10 @@ function App() {
                     type="checkbox"
                     checked={draftVision?.enabled ?? false}
                     disabled={!analysisSettings?.ocrAvailable || savingVision}
-                    onChange={(event) => setDraftVision((current) => current && {
-                      ...current, enabled: event.currentTarget.checked,
-                    })}
+                    onChange={(event) => {
+                      const enabled = event.currentTarget.checked;
+                      setDraftVision((current) => current && { ...current, enabled });
+                    }}
                   />
                   Generate titles and descriptions with AI
                 </label>
@@ -998,9 +999,10 @@ function App() {
                       type="url"
                       value={draftVision?.endpoint ?? ""}
                       disabled={!analysisSettings?.ocrAvailable || savingVision}
-                      onChange={(event) => setDraftVision((current) => current && {
-                        ...current, endpoint: event.currentTarget.value,
-                      })}
+                      onChange={(event) => {
+                        const endpoint = event.currentTarget.value;
+                        setDraftVision((current) => current && { ...current, endpoint });
+                      }}
                       placeholder="http://127.0.0.1:8083/v1/chat/completions"
                     />
                   </label>
@@ -1010,9 +1012,10 @@ function App() {
                       type="text"
                       value={draftVision?.model ?? ""}
                       disabled={!analysisSettings?.ocrAvailable || savingVision}
-                      onChange={(event) => setDraftVision((current) => current && {
-                        ...current, model: event.currentTarget.value,
-                      })}
+                      onChange={(event) => {
+                        const model = event.currentTarget.value;
+                        setDraftVision((current) => current && { ...current, model });
+                      }}
                     />
                   </label>
                 </div>
