@@ -84,6 +84,7 @@ type StorageLocationUpdate = {
 };
 
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
+const isMacOS = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const DRAG_THRESHOLD = 5;
 const SHORTCUT_STORAGE_KEY = "capture-vault.shortcuts.v1";
 const SHORTCUT_MODIFIERS: ShortcutModifiers[] = [
@@ -151,7 +152,29 @@ function shortcutAccelerator(binding: ShortcutBinding) {
 }
 
 function shortcutLabel(binding: ShortcutBinding) {
+  const modifiers = binding.modifiers.split("+");
+  if (isMacOS) {
+    const symbols: Record<string, string> = {
+      Control: "⌃",
+      Alt: "⌥",
+      Shift: "⇧",
+      Super: "⌘",
+    };
+    return `${modifiers.map((modifier) => symbols[modifier] ?? modifier).join("")}${binding.key}`;
+  }
   return shortcutAccelerator(binding).replace("Control", "Ctrl").split("+").join(" + ");
+}
+
+function shortcutModifiersLabel(modifiers: ShortcutModifiers) {
+  return modifiers
+    .split("+")
+    .map((modifier) => {
+      if (modifier === "Control") return isMacOS ? "Control" : "Ctrl";
+      if (modifier === "Alt") return isMacOS ? "Option" : "Alt";
+      if (modifier === "Super") return isMacOS ? "Command" : "Super";
+      return modifier;
+    })
+    .join(" + ");
 }
 
 function errorMessage(error: unknown) {
@@ -230,7 +253,7 @@ function ShortcutEditor({ description, label, value, onChange }: ShortcutEditorP
         >
           {SHORTCUT_MODIFIERS.map((modifiers) => (
             <option value={modifiers} key={modifiers}>
-              {modifiers.replace("Control", "Ctrl").split("+").join(" + ")}
+              {shortcutModifiersLabel(modifiers)}
             </option>
           ))}
         </select>
