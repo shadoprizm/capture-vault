@@ -2,6 +2,12 @@
 
 All notable changes to CaptureVault are documented here.
 
+## 0.3.2 — 2026-10-08
+
+- Keep macOS capture hotkeys active after closing the library window.
+- Reopen the library from the Dock; use Quit CaptureRecall to exit the app.
+- Display macOS shortcuts with Control, Option, Shift, and Command labels.
+
 ## 0.3.1 — 2026-09-24
 
 - Check CaptureRecall's actual macOS Screen Recording access before capture and

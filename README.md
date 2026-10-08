@@ -20,12 +20,12 @@ product rename.
 
 ## Download for macOS
 
-CaptureRecall v0.3.1 supports Apple Silicon Macs running macOS 14 or newer. It
+CaptureRecall v0.3.2 supports Apple Silicon Macs running macOS 14 or newer. It
 captures the main display with ScreenCaptureKit and selected regions with the
 native macOS crosshair picker. The app hides itself before capture, runs OCR on
 device, and keeps the library local by default.
 
-[Download the latest macOS DMG](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.1).
+[Download the latest macOS DMG](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.2).
 
 The current preview is ad-hoc signed while the project awaits a Developer ID
 Application certificate. macOS may require approval from **System Settings →
@@ -35,27 +35,27 @@ the required certificate and credentials are configured.
 
 ## Download for Linux
 
-CaptureRecall v0.3.1 is an x86_64 Linux prerelease. Choose the package that fits
-your desktop, or visit the [full v0.3.1 release](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.1)
+CaptureRecall v0.3.2 is an x86_64 Linux prerelease. Choose the package that fits
+your desktop, or visit the [full v0.3.2 release](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.2)
 for its RPM package and SHA-256 checksums.
 
 ### Ubuntu or Debian
 
-[Download the `.deb` installer](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.1/CaptureRecall_0.3.1_amd64.deb),
+[Download the `.deb` installer](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.2/CaptureRecall_0.3.2_amd64.deb),
 then run this from the directory containing the downloaded file:
 
 ```bash
-sudo apt install ./CaptureRecall_0.3.1_amd64.deb
+sudo apt install ./CaptureRecall_0.3.2_amd64.deb
 ```
 
 ### Portable Linux build
 
-[Download the AppImage](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.1/CaptureRecall_0.3.1_amd64.AppImage),
+[Download the AppImage](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.2/CaptureRecall_0.3.2_amd64.AppImage),
 make it executable, and launch it:
 
 ```bash
-chmod +x CaptureRecall_0.3.1_amd64.AppImage
-./CaptureRecall_0.3.1_amd64.AppImage
+chmod +x CaptureRecall_0.3.2_amd64.AppImage
+./CaptureRecall_0.3.2_amd64.AppImage
 ```
 
 ## Compatibility and support status
@@ -78,6 +78,12 @@ chmod +x CaptureRecall_0.3.1_amd64.AppImage
 - Copy a capture as both an image and PNG file for pasting or attaching
 - Drag a capture directly into another app or folder as a native file copy
 - Permanently delete a capture and its metadata
+
+### New in v0.3.2
+
+- Closing the macOS library window keeps CaptureRecall and its hotkeys running
+- Click the Dock icon to reopen the library; choose Quit CaptureRecall to exit
+- Mac shortcut labels use Control, Option, Shift, and Command
 
 ### New in v0.3.0
 

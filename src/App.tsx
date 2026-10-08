@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "./components/Icon";
+import { version } from "../package.json";
 import "./App.css";
 
 type CaptureMode = "area" | "screen";
@@ -835,7 +836,7 @@ function App() {
           </div>
         </div>
 
-        <p className="version">Mac preview · v0.3.1</p>
+        <p className="version">Mac preview · v{version}</p>
       </aside>
 
       <main className="workspace">
@@ -1073,8 +1074,9 @@ function App() {
             <div className="settings-note">
               <Icon name="lock" size={17} />
               <p>
-                Shortcuts are registered only while CaptureRecall is running. Ubuntu may reserve
-                some combinations for system actions.
+                {isMacOS
+                  ? "Shortcuts keep working when you close the library window. Click CaptureRecall in the Dock to reopen it, or choose Quit CaptureRecall to stop the app. macOS may reserve some key combinations."
+                  : "Shortcuts are registered only while CaptureRecall is running. Ubuntu may reserve some combinations for system actions."}
               </p>
             </div>
 
