@@ -79,6 +79,11 @@ pub enum CaptureError {
     #[cfg(target_os = "macos")]
     #[error("Screenshot cancelled")]
     Cancelled,
+    #[cfg(target_os = "macos")]
+    #[error(
+        "macOS is denying Screen Recording access to CaptureRecall. In System Settings → Privacy & Security → Screen & System Audio Recording, turn CaptureRecall off and back on, then quit and reopen it. If access is still denied, remove the old CaptureRecall entry and add the installed app again."
+    )]
+    PermissionDenied,
     #[cfg(any(target_os = "linux", test))]
     #[error("The screenshot request failed: {0}")]
     Portal(String),

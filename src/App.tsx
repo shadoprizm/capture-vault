@@ -11,12 +11,8 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import {
-  register,
-  unregisterAll,
-  type ShortcutEvent,
-} from "@tauri-apps/plugin-global-shortcut";
 import { Icon } from "./components/Icon";
+import { version } from "../package.json";
 import "./App.css";
 
 type CaptureMode = "area" | "screen";
@@ -62,6 +58,19 @@ type ShortcutBinding = {
 
 type ShortcutSettings = Record<CaptureMode, ShortcutBinding>;
 
+type VisionSettings = {
+  enabled: boolean;
+  endpoint: string;
+  model: string;
+};
+
+type AnalysisSettings = {
+  ocrAvailable: boolean;
+  ocrError: string | null;
+  vision: VisionSettings;
+  visionError: string | null;
+};
+
 type DragGesture = {
   captureId: string;
   pointerId: number;
@@ -76,6 +85,7 @@ type StorageLocationUpdate = {
 };
 
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
+const isMacOS = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const DRAG_THRESHOLD = 5;
 const SHORTCUT_STORAGE_KEY = "capture-vault.shortcuts.v1";
 const SHORTCUT_MODIFIERS: ShortcutModifiers[] = [
@@ -143,7 +153,29 @@ function shortcutAccelerator(binding: ShortcutBinding) {
 }
 
 function shortcutLabel(binding: ShortcutBinding) {
+  const modifiers = binding.modifiers.split("+");
+  if (isMacOS) {
+    const symbols: Record<string, string> = {
+      Control: "⌃",
+      Alt: "⌥",
+      Shift: "⇧",
+      Super: "⌘",
+    };
+    return `${modifiers.map((modifier) => symbols[modifier] ?? modifier).join("")}${binding.key}`;
+  }
   return shortcutAccelerator(binding).replace("Control", "Ctrl").split("+").join(" + ");
+}
+
+function shortcutModifiersLabel(modifiers: ShortcutModifiers) {
+  return modifiers
+    .split("+")
+    .map((modifier) => {
+      if (modifier === "Control") return isMacOS ? "Control" : "Ctrl";
+      if (modifier === "Alt") return isMacOS ? "Option" : "Alt";
+      if (modifier === "Super") return isMacOS ? "Command" : "Super";
+      return modifier;
+    })
+    .join(" + ");
 }
 
 function errorMessage(error: unknown) {
@@ -222,7 +254,7 @@ function ShortcutEditor({ description, label, value, onChange }: ShortcutEditorP
         >
           {SHORTCUT_MODIFIERS.map((modifiers) => (
             <option value={modifiers} key={modifiers}>
-              {modifiers.replace("Control", "Ctrl").split("+").join(" + ")}
+              {shortcutModifiersLabel(modifiers)}
             </option>
           ))}
         </select>
@@ -253,6 +285,9 @@ function App() {
     cloneShortcuts(shortcutSettings),
   );
   const [savingShortcuts, setSavingShortcuts] = useState(false);
+  const [analysisSettings, setAnalysisSettings] = useState<AnalysisSettings | null>(null);
+  const [draftVision, setDraftVision] = useState<VisionSettings | null>(null);
+  const [savingVision, setSavingVision] = useState(false);
   const [storageLocation, setStorageLocation] = useState("");
   const [changingStorage, setChangingStorage] = useState(false);
   const [query, setQuery] = useState("");
@@ -273,9 +308,6 @@ function App() {
   const suppressCardClick = useRef(false);
   const selectedIdRef = useRef<string | null>(null);
   const captureInProgressRef = useRef(false);
-  const captureRef = useRef<
-    (mode: CaptureMode, trigger?: "button" | "shortcut") => Promise<void>
-  >(async () => undefined);
   const shortcutSettingsRef = useRef(shortcutSettings);
 
   const selected = captures.find((capture) => capture.id === selectedId) ?? null;
@@ -325,32 +357,27 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isTauriRuntime) return;
+    void invoke<AnalysisSettings>("get_analysis_settings")
+      .then((analysis) => {
+        setAnalysisSettings(analysis);
+        setDraftVision(analysis.vision);
+      })
+      .catch((analysisError) => setError(`Could not load local analysis settings: ${errorMessage(analysisError)}`));
+  }, []);
+
+  useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
 
   useEffect(() => {
     if (!isTauriRuntime) return;
 
-    let active = true;
-    void queueShortcutOperation(async () => {
-      await unregisterAll();
-      if (!active) return;
-      try {
-        await registerShortcutBindings(shortcutSettingsRef.current);
-      } catch (shortcutError) {
-        await unregisterAll().catch(() => undefined);
-        throw shortcutError;
-      }
-    }).catch((shortcutError) => {
-      if (active) {
-        setError(`Global shortcuts are unavailable: ${errorMessage(shortcutError)}`);
-      }
+    void queueShortcutOperation(() => invoke("configure_shortcuts", {
+      settings: shortcutSettingsRef.current,
+    })).catch((shortcutError) => {
+      setError(`Global shortcuts are unavailable: ${errorMessage(shortcutError)}`);
     });
-
-    return () => {
-      active = false;
-      void queueShortcutOperation(() => unregisterAll()).catch(() => undefined);
-    };
   }, []);
 
   useEffect(() => {
@@ -359,12 +386,23 @@ function App() {
     let disposed = false;
     let stopEnriched: (() => void) | undefined;
     let stopFailed: (() => void) | undefined;
+    let stopCreated: (() => void) | undefined;
+    let stopCaptureFailed: (() => void) | undefined;
 
     void Promise.all([
+      listen<CaptureRecord>("capture-created", ({ payload }) => {
+        setCaptures((current) => {
+          const existing = current.find((item) => item.id === payload.id);
+          return [existing ?? payload, ...current.filter((item) => item.id !== payload.id)];
+        });
+        setSelectedId(payload.id);
+        setNotice("Screenshot saved to your private library.");
+      }),
+      listen<string>("capture-failed", ({ payload }) => setError(payload)),
       listen<CaptureRecord>("capture-enriched", ({ payload }) => {
-        setCaptures((current) =>
-          current.map((capture) => (capture.id === payload.id ? payload : capture)),
-        );
+        setCaptures((current) => current.some((capture) => capture.id === payload.id)
+          ? current.map((capture) => (capture.id === payload.id ? payload : capture))
+          : [payload, ...current]);
         setAnalyzingId((current) => (current === payload.id ? null : current));
         if (selectedIdRef.current === payload.id) {
           setDraftTitle((current) => current || payload.title);
@@ -376,12 +414,16 @@ function App() {
         setAnalyzingId(null);
       }),
     ])
-      .then(([unlistenEnriched, unlistenFailed]) => {
+      .then(([unlistenCreated, unlistenCaptureFailed, unlistenEnriched, unlistenFailed]) => {
         if (disposed) {
+          unlistenCreated();
+          unlistenCaptureFailed();
           unlistenEnriched();
           unlistenFailed();
           return;
         }
+        stopCreated = unlistenCreated;
+        stopCaptureFailed = unlistenCaptureFailed;
         stopEnriched = unlistenEnriched;
         stopFailed = unlistenFailed;
       })
@@ -389,6 +431,8 @@ function App() {
 
     return () => {
       disposed = true;
+      stopCreated?.();
+      stopCaptureFailed?.();
       stopEnriched?.();
       stopFailed?.();
     };
@@ -400,18 +444,6 @@ function App() {
     setDraftNote(selected?.note ?? "");
     setDraftTags(selected?.tags.join(", ") ?? "");
   }, [selectedId]);
-
-  async function registerShortcutBindings(settings: ShortcutSettings) {
-    const entries = (["area", "screen"] as CaptureMode[]).filter(
-      (mode) => settings[mode].enabled,
-    );
-
-    for (const mode of entries) {
-      await register(shortcutAccelerator(settings[mode]), (event: ShortcutEvent) => {
-        if (event.state === "Pressed") void captureRef.current(mode, "shortcut");
-      });
-    }
-  }
 
   async function saveShortcutSettings() {
     const next = cloneShortcuts(draftShortcuts);
@@ -429,27 +461,35 @@ function App() {
     const previous = cloneShortcuts(shortcutSettingsRef.current);
 
     try {
-      await queueShortcutOperation(async () => {
-        await unregisterAll();
-        try {
-          await registerShortcutBindings(next);
-        } catch (shortcutError) {
-          await unregisterAll().catch(() => undefined);
-          await registerShortcutBindings(previous).catch(() => undefined);
-          throw shortcutError;
-        }
-      });
+      await queueShortcutOperation(() => invoke("configure_shortcuts", { settings: next }));
       localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(next));
       shortcutSettingsRef.current = next;
       setShortcutSettings(next);
       setDraftShortcuts(cloneShortcuts(next));
       setNotice("Global shortcuts updated.");
     } catch (shortcutError) {
+      shortcutSettingsRef.current = previous;
       setError(
         `Could not register those shortcuts. Another app may already use one: ${errorMessage(shortcutError)}`,
       );
     } finally {
       setSavingShortcuts(false);
+    }
+  }
+
+  async function saveVisionSettings() {
+    if (!draftVision) return;
+    setSavingVision(true);
+    setError(null);
+    try {
+      const saved = await invoke<VisionSettings>("set_vision_settings", { settings: draftVision });
+      setAnalysisSettings((current) => current && { ...current, vision: saved, visionError: null });
+      setDraftVision(saved);
+      setNotice(saved.enabled ? "Local AI titles and descriptions enabled." : "Local AI titles and descriptions disabled.");
+    } catch (visionError) {
+      setError(errorMessage(visionError));
+    } finally {
+      setSavingVision(false);
     }
   }
 
@@ -515,7 +555,10 @@ function App() {
       await appWindow.hide();
       await new Promise((resolve) => window.setTimeout(resolve, 180));
       const created = await invoke<CaptureRecord>("capture_screen", { mode });
-      setCaptures((current) => [created, ...current]);
+      setCaptures((current) => {
+        const existing = current.find((item) => item.id === created.id);
+        return [existing ?? created, ...current.filter((item) => item.id !== created.id)];
+      });
       setSelectedId(created.id);
       setNotice("Screenshot saved to your private library.");
     } catch (captureError) {
@@ -528,8 +571,6 @@ function App() {
       setCapturing(null);
     }
   }
-
-  captureRef.current = capture;
 
   async function updateMetadata(
     capture: CaptureRecord,
@@ -602,7 +643,7 @@ function App() {
       setDraftDescription((current) => current || updated.description);
       setNotice(
         updated.enrichmentStatus === "partial"
-          ? "OCR is searchable, but the local vision model was unavailable."
+          ? "OCR is searchable, but the vision service was unavailable."
           : "Semantic title, description, and searchable text are ready.",
       );
     } catch (analysisError) {
@@ -795,7 +836,7 @@ function App() {
           </div>
         </div>
 
-        <p className="version">Mac preview · v0.3.0</p>
+        <p className="version">Mac preview · v{version}</p>
       </aside>
 
       <main className="workspace">
@@ -949,18 +990,67 @@ function App() {
               </button>
             </div>
 
-            <h3 className="settings-section-title">Optional vision analysis</h3>
-            <div className="settings-card storage-setting">
+            <h3 className="settings-section-title">Image analysis</h3>
+            <div className="settings-card analysis-setting">
               <span className="storage-setting-icon" aria-hidden="true">
                 <Icon name="sparkles" size={20} />
               </span>
               <div className="storage-setting-copy">
-                <strong>Off by default</strong>
+                <strong>{analysisSettings?.ocrAvailable ? "OCR is on" : "OCR is unavailable"}</strong>
                 <p>
-                  OCR always runs on this device. To opt in to generated titles and descriptions,
-                  launch CaptureRecall with this setting and only use a local service you trust.
+                  {analysisSettings?.ocrAvailable
+                    ? "Every new capture is scanned for searchable text on this device."
+                    : analysisSettings?.ocrError ?? "Checking the bundled OCR models…"}
                 </p>
-                <code>CAPTURE_VAULT_ENABLE_VISION=1</code>
+                <label className="vision-toggle">
+                  <input
+                    type="checkbox"
+                    checked={draftVision?.enabled ?? false}
+                    disabled={!analysisSettings?.ocrAvailable || savingVision}
+                    onChange={(event) => {
+                      const enabled = event.currentTarget.checked;
+                      setDraftVision((current) => current && { ...current, enabled });
+                    }}
+                  />
+                  Generate titles and descriptions with AI
+                </label>
+                <p>Optional. The complete image is sent to the service at this address. A tunnel can forward it to another computer. Only use a service you trust.</p>
+                {analysisSettings?.visionError && <p className="analysis-error">{analysisSettings.visionError}</p>}
+                <div className="vision-fields">
+                  <label>
+                    Service URL on this Mac
+                    <input
+                      type="url"
+                      value={draftVision?.endpoint ?? ""}
+                      disabled={!analysisSettings?.ocrAvailable || savingVision}
+                      onChange={(event) => {
+                        const endpoint = event.currentTarget.value;
+                        setDraftVision((current) => current && { ...current, endpoint });
+                      }}
+                      placeholder="http://127.0.0.1:8083/v1/chat/completions"
+                    />
+                  </label>
+                  <label>
+                    Vision model name
+                    <input
+                      type="text"
+                      value={draftVision?.model ?? ""}
+                      disabled={!analysisSettings?.ocrAvailable || savingVision}
+                      onChange={(event) => {
+                        const model = event.currentTarget.value;
+                        setDraftVision((current) => current && { ...current, model });
+                      }}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={!analysisSettings?.ocrAvailable || savingVision || !draftVision}
+                  onClick={() => void saveVisionSettings()}
+                >
+                  {savingVision ? "Saving…" : "Save analysis settings"}
+                </button>
               </div>
             </div>
 
@@ -984,8 +1074,9 @@ function App() {
             <div className="settings-note">
               <Icon name="lock" size={17} />
               <p>
-                Shortcuts are registered only while CaptureRecall is running. Ubuntu may reserve
-                some combinations for system actions.
+                {isMacOS
+                  ? "Shortcuts keep working when you close the library window. Click CaptureRecall in the Dock to reopen it, or choose Quit CaptureRecall to stop the app. macOS may reserve some key combinations."
+                  : "Shortcuts are registered only while CaptureRecall is running. Ubuntu may reserve some combinations for system actions."}
               </p>
             </div>
 
@@ -1283,7 +1374,7 @@ function App() {
                 placeholder="Why did you save this?"
                 rows={4}
               />
-              <small>Your personal context. Local analysis never changes it.</small>
+              <small>Your personal context. Automatic analysis never changes it.</small>
             </label>
 
             <label className="field">

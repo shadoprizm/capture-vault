@@ -5,7 +5,11 @@
 //! selection interaction to macOS' built-in `screencapture` picker, which keeps
 //! the familiar crosshair, Escape-to-cancel behavior, and multi-display support.
 
-use std::{fs, process::Command};
+use std::{
+    fs,
+    process::Command,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use screencapturekit::{
     screenshot_manager::{CGImageExt, SCScreenshotManager},
@@ -47,6 +51,7 @@ impl CaptureProvider for MacOsCaptureProvider {
 }
 
 fn capture_first_display() -> Result<CapturedImage, CaptureError> {
+    check_permission()?;
     let content = SCShareableContent::get().map_err(native_error)?;
     let displays = content.displays();
     let main_display_id = main_display_id();
@@ -98,6 +103,7 @@ fn capture_first_display() -> Result<CapturedImage, CaptureError> {
 }
 
 fn capture_selected_area() -> Result<CapturedImage, CaptureError> {
+    check_permission()?;
     capture_with_screencapture(&["-i", "-s", "-x", "-t", "png"], true)
 }
 
@@ -111,35 +117,60 @@ fn capture_with_screencapture(
     empty_output_is_cancelled: bool,
 ) -> Result<CapturedImage, CaptureError> {
     let path = temporary_png_path()?;
-    let status = Command::new("/usr/sbin/screencapture")
+    let output = Command::new("/usr/sbin/screencapture")
         .args(arguments)
         .arg(path.as_os_str())
-        .status()
+        .output()
         .map_err(|error| CaptureError::Native {
             platform: "macOS",
             message: format!("could not launch the macOS area picker: {error}"),
         })?;
 
-    let captured = status.success()
-        && fs::metadata(path.to_path_buf())
-            .map(|metadata| metadata.len() > 0)
-            .unwrap_or(false);
+    let captured = fs::metadata(path.to_path_buf())
+        .map(|metadata| metadata.len() > 0)
+        .unwrap_or(false);
 
     if captured {
         Ok(CapturedImage::from_temporary(path))
-    } else if status.success() && empty_output_is_cancelled {
+    } else if unsafe { !CGPreflightScreenCaptureAccess() } {
+        Err(CaptureError::PermissionDenied)
+    } else if empty_output_is_cancelled && output.stderr.is_empty() {
         Err(CaptureError::Cancelled)
     } else {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         Err(CaptureError::Native {
             platform: "macOS",
-            message: format!("the macOS area picker exited with {status}"),
+            message: if detail.is_empty() {
+                format!(
+                    "the macOS area picker exited with {} without saving an image",
+                    output.status
+                )
+            } else {
+                format!("the macOS area picker failed: {detail}")
+            },
         })
+    }
+}
+
+fn check_permission() -> Result<(), CaptureError> {
+    // TCC can retain an enabled-looking entry for an older signature. Ask the
+    // OS for the current process's actual access before launching the picker.
+    static REQUESTED_THIS_RUN: AtomicBool = AtomicBool::new(false);
+    let allowed = unsafe { CGPreflightScreenCaptureAccess() }
+        || (!REQUESTED_THIS_RUN.swap(true, Ordering::AcqRel)
+            && unsafe { CGRequestScreenCaptureAccess() });
+    if allowed {
+        Ok(())
+    } else {
+        Err(CaptureError::PermissionDenied)
     }
 }
 
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
     fn CGMainDisplayID() -> u32;
+    fn CGPreflightScreenCaptureAccess() -> bool;
+    fn CGRequestScreenCaptureAccess() -> bool;
 }
 
 fn main_display_id() -> u32 {
@@ -149,8 +180,13 @@ fn main_display_id() -> u32 {
 }
 
 fn native_error(error: impl std::fmt::Display) -> CaptureError {
-    CaptureError::Native {
-        platform: "macOS",
-        message: error.to_string(),
+    let message = error.to_string();
+    if message.to_ascii_lowercase().contains("declined tcc") {
+        CaptureError::PermissionDenied
+    } else {
+        CaptureError::Native {
+            platform: "macOS",
+            message,
+        }
     }
 }
