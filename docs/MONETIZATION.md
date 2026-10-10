@@ -40,5 +40,5 @@ Twenty teams with five paid seats each at CAD $15/seat/month would produce CAD $
 The optional hosted-vault implementation now uses Personal CAD $8/month and Team
 CAD $15/seat/month, with explicit uploads and bounded storage. The pricing page
 is published, but purchases remain disabled pending merchant configuration and
-a real Stripe test payment. Native desktop controls are in the reconciliation
+live credentials, tax setup, and an end-to-end Stripe Checkout test. Dedicated resources now exist in the verified Canadian Stripe sandbox; real subscription API activation, portal and cancellation checks passed. Native desktop controls are in the reconciliation
 branch/PR, not the published v0.3.3 installers. See PAID_OPTIONS.md.
