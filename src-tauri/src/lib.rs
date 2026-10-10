@@ -97,8 +97,9 @@ async fn configure_shortcuts(
 #[tauri::command]
 async fn cloud_list(
     connection: cloud::CloudConnection,
-) -> Result<Vec<cloud::CloudCapture>, String> {
-    tauri::async_runtime::spawn_blocking(move || cloud::list(&connection))
+    cursor: Option<String>,
+) -> Result<cloud::CloudPage, String> {
+    tauri::async_runtime::spawn_blocking(move || cloud::list(&connection, cursor))
         .await
         .map_err(|e| e.to_string())?
 }

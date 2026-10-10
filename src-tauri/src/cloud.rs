@@ -43,6 +43,13 @@ pub struct CloudMetadata {
     pub created_at: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudPage {
+    pub captures: Vec<CloudCapture>,
+    pub next_cursor: Option<String>,
+}
+
 fn client(connection: &CloudConnection) -> Result<reqwest::blocking::Client, String> {
     uuid::Uuid::parse_str(&connection.workspace)
         .map_err(|_| "Enter the library ID from your hosted account.".to_string())?;
@@ -87,22 +94,21 @@ fn response(mut response: reqwest::blocking::Response, limit: u64) -> Result<Vec
     Ok(bytes)
 }
 
-pub fn list(connection: &CloudConnection) -> Result<Vec<CloudCapture>, String> {
+pub fn list(connection: &CloudConnection, cursor: Option<String>) -> Result<CloudPage, String> {
+    let mut query = vec![("workspace", connection.workspace.clone())];
+    if let Some(cursor) = cursor {
+        query.push(("cursor", cursor));
+    }
     let response_bytes = response(
         client(connection)?
             .get(format!("{ORIGIN}/api/vault/list"))
-            .query(&[("workspace", &connection.workspace)])
+            .query(&query)
             .bearer_auth(&connection.token)
             .send()
             .map_err(|_| "Could not reach your hosted vault.")?,
-        110 * 1024 * 1024,
+        32 * 1024 * 1024,
     )?;
-    #[derive(Deserialize)]
-    struct List {
-        captures: Vec<CloudCapture>,
-    }
-    serde_json::from_slice::<List>(&response_bytes)
-        .map(|list| list.captures)
+    serde_json::from_slice::<CloudPage>(&response_bytes)
         .map_err(|_| "Could not read the hosted library.".into())
 }
 
@@ -140,10 +146,20 @@ pub fn restore(
     store: &CaptureStore,
     id: &str,
 ) -> Result<CaptureRecord, String> {
-    let capture = list(connection)?
-        .into_iter()
-        .find(|c| c.id == id)
-        .ok_or("Hosted screenshot was not found.")?;
+    let metadata_bytes = response(
+        client(connection)?
+            .get(format!("{ORIGIN}/api/vault/capture"))
+            .query(&[
+                ("workspace", &connection.workspace),
+                ("id", &id.to_string()),
+            ])
+            .bearer_auth(&connection.token)
+            .send()
+            .map_err(|_| "Could not read the hosted screenshot.")?,
+        1024 * 1024,
+    )?;
+    let capture: CloudCapture = serde_json::from_slice(&metadata_bytes)
+        .map_err(|_| "Could not read screenshot metadata.")?;
     uuid::Uuid::parse_str(&capture.id).map_err(|_| "Invalid hosted screenshot ID.")?;
     let bytes = response(
         client(connection)?

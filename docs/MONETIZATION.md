@@ -34,3 +34,11 @@ The next desktop adoption bet is importing existing screenshots, if trials confi
 ## Revenue illustration
 
 Twenty teams with five paid seats each at CAD $15/seat/month would produce CAD $1,500 monthly gross subscription revenue, before costs and taxes. This is arithmetic to size the experiment, not a forecast. Track qualified paid-pilot interest and repeat retrieval use, not downloads alone.
+
+## Implementation update — October 10, 2026
+
+The optional hosted-vault implementation now uses Personal CAD $8/month and Team
+CAD $15/seat/month, with explicit uploads and bounded storage. The pricing page
+is published, but purchases remain disabled pending merchant configuration and
+a real Stripe test payment. Native desktop controls are in the reconciliation
+branch/PR, not the published v0.3.3 installers. See PAID_OPTIONS.md.
