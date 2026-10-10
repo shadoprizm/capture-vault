@@ -26,6 +26,7 @@ pub struct EnrichmentResult {
     pub description: String,
     pub ocr_text: String,
     pub status: &'static str,
+    pub warning: Option<String>,
 }
 
 pub struct EnrichmentEngine {
@@ -37,8 +38,11 @@ pub struct EnrichmentEngine {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VisionSettings {
+    #[serde(alias = "visionEnabled")]
     pub enabled: bool,
+    #[serde(alias = "visionEndpoint")]
     pub endpoint: String,
+    #[serde(alias = "visionModel")]
     pub model: String,
 }
 
@@ -107,9 +111,16 @@ impl EnrichmentEngine {
         })
         .map_err(|error| format!("Could not initialize the OCR engine: {error}"))?;
 
-        let (settings, settings_error): (VisionSettings, Option<String>) = if settings_path.exists()
-        {
-            match fs::read(&settings_path)
+        // Preserve choices saved by the earlier Linux-only implementation.
+        // The current settings file always wins when both are present.
+        let legacy_settings_path = settings_path.with_file_name("analysis-settings.json");
+        let load_path = if settings_path.exists() {
+            &settings_path
+        } else {
+            &legacy_settings_path
+        };
+        let (settings, settings_error): (VisionSettings, Option<String>) = if load_path.exists() {
+            match fs::read(load_path)
                 .map_err(|error| error.to_string())
                 .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|error| error.to_string()))
             {
@@ -183,8 +194,13 @@ impl EnrichmentEngine {
             .vision
             .write()
             .map_err(|_| "Could not update vision settings")?;
-        fs::write(&self.settings_path, serialized)
+        let temporary = self.settings_path.with_extension("json.part");
+        fs::write(&temporary, serialized)
             .map_err(|error| format!("Could not save vision settings: {error}"))?;
+        fs::rename(&temporary, &self.settings_path).map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            format!("Could not save vision settings: {error}")
+        })?;
         state.settings = settings.clone();
         state.client = client;
         state.error = None;
@@ -192,12 +208,15 @@ impl EnrichmentEngine {
     }
 
     pub fn analyze(&self, image_path: &Path) -> Result<EnrichmentResult, String> {
-        let vision = self
-            .vision
-            .read()
-            .map_err(|_| "Could not read vision settings")?
-            .client
-            .clone();
+        // Snapshot settings before starting work so a settings change never waits
+        // for an in-flight OCR or HTTP request.
+        let (vision, vision_error) = {
+            let state = self
+                .vision
+                .read()
+                .map_err(|_| "Could not read vision settings")?;
+            (state.client.clone(), state.error.clone())
+        };
         let (ocr_result, vision_result) = if let Some(vision) = vision {
             std::thread::scope(|scope| {
                 let vision_task = scope.spawn(|| vision.analyze(image_path));
@@ -205,39 +224,20 @@ impl EnrichmentEngine {
                 let vision_result = vision_task
                     .join()
                     .map_err(|_| "The vision service stopped unexpectedly".to_owned())
-                    .and_then(|result| result);
+                    .and_then(|result| result)
+                    .map(Some);
                 (ocr_result, vision_result)
             })
         } else {
             (
                 self.extract_ocr(image_path),
-                Err("Optional vision analysis is off".into()),
+                match vision_error {
+                    Some(error) => Err(error),
+                    None => Ok(None),
+                },
             )
         };
-
-        match (ocr_result, vision_result) {
-            (Ok(ocr_text), Ok(metadata)) => Ok(EnrichmentResult {
-                title: metadata.title,
-                description: metadata.description,
-                ocr_text,
-                status: "complete",
-            }),
-            (Err(_ocr_error), Ok(metadata)) => Ok(EnrichmentResult {
-                title: metadata.title,
-                description: metadata.description,
-                ocr_text: String::new(),
-                status: "complete",
-            }),
-            (Ok(ocr_text), Err(_vision_error)) => Ok(EnrichmentResult {
-                title: String::new(),
-                description: String::new(),
-                ocr_text,
-                status: "partial",
-            }),
-            (Err(ocr_error), Err(vision_error)) => Err(format!(
-                "Image analysis failed. OCR: {ocr_error} Vision AI: {vision_error}"
-            )),
-        }
+        combine_analysis(ocr_result, vision_result)
     }
 
     fn extract_ocr(&self, image_path: &Path) -> Result<String, String> {
@@ -370,7 +370,7 @@ fn local_http_client(timeout: Duration) -> Result<Client, String> {
 fn validate_local_endpoint(endpoint: &str) -> Result<(), String> {
     let url = url::Url::parse(endpoint)
         .map_err(|error| format!("The vision endpoint is invalid: {error}"))?;
-    let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
+    let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
     if url.scheme() != "http" || !local {
         return Err(
             "CaptureVault only sends screenshots to a loopback HTTP vision endpoint".into(),
@@ -388,6 +388,54 @@ fn parse_vision_enabled(value: Option<&str>) -> bool {
         value.map(str::trim).map(|value| value.to_ascii_lowercase()),
         Some(value) if matches!(value.as_str(), "1" | "true" | "yes" | "on")
     )
+}
+
+fn combine_analysis(
+    ocr: Result<String, String>,
+    vision: Result<Option<VisionMetadata>, String>,
+) -> Result<EnrichmentResult, String> {
+    match (ocr, vision) {
+        (Ok(ocr_text), Ok(Some(metadata))) => Ok(EnrichmentResult {
+            title: metadata.title,
+            description: metadata.description,
+            ocr_text,
+            status: "complete",
+            warning: None,
+        }),
+        (Err(error), Ok(Some(metadata))) => Ok(EnrichmentResult {
+            title: metadata.title,
+            description: metadata.description,
+            ocr_text: String::new(),
+            status: "vision_only",
+            warning: Some(format!(
+                "Titles and descriptions are ready, but OCR failed: {error}"
+            )),
+        }),
+        (Ok(ocr_text), Ok(None)) => Ok(EnrichmentResult {
+            title: String::new(),
+            description: String::new(),
+            status: if ocr_text.is_empty() {
+                "no_text"
+            } else {
+                "ocr_only"
+            },
+            ocr_text,
+            warning: None,
+        }),
+        (Ok(ocr_text), Err(error)) => Ok(EnrichmentResult {
+            title: String::new(),
+            description: String::new(),
+            ocr_text,
+            status: "partial",
+            warning: Some(format!(
+                "OCR finished, but titles and descriptions could not be generated: {error}"
+            )),
+        }),
+        (Err(error), Ok(None)) => Err(format!("Local OCR failed: {error}")),
+        (Err(ocr_error), Err(vision_error)) => Err(format!(
+            "Local analysis failed. OCR: {ocr_error} Vision AI: {vision_error}"
+        )),
+    }
 }
 
 fn split_widely_spaced_words(line: &TextLine) -> Vec<String> {
@@ -474,6 +522,10 @@ mod tests {
         assert!(validate_local_endpoint(DEFAULT_VISION_ENDPOINT).is_ok());
         assert!(validate_local_endpoint("http://localhost:1234/v1/chat/completions").is_ok());
         assert!(validate_local_endpoint("https://example.com/v1/chat/completions").is_err());
+        assert!(validate_local_endpoint("http://[::1]:8083/v1/chat/completions").is_ok());
+        assert!(
+            validate_local_endpoint("http://127.0.0.1.example.com/v1/chat/completions").is_err()
+        );
     }
 
     #[test]
@@ -484,6 +536,148 @@ mod tests {
         assert!(parse_vision_enabled(Some("1")));
         assert!(parse_vision_enabled(Some("TRUE")));
         assert!(parse_vision_enabled(Some(" on ")));
+    }
+
+    #[test]
+    fn distinguishes_disabled_vision_empty_ocr_and_model_failure() {
+        let ocr_only = combine_analysis(Ok("Detected text".into()), Ok(None)).unwrap();
+        assert_eq!(ocr_only.status, "ocr_only");
+        assert!(ocr_only.warning.is_none());
+        let no_text = combine_analysis(Ok(String::new()), Ok(None)).unwrap();
+        assert_eq!(no_text.status, "no_text");
+        let partial =
+            combine_analysis(Ok("Detected text".into()), Err("Connection refused".into())).unwrap();
+        assert_eq!(partial.status, "partial");
+        assert_eq!(partial.ocr_text, "Detected text");
+        assert!(partial.warning.unwrap().contains("Connection refused"));
+        let vision_only = combine_analysis(
+            Err("Recognition failed".into()),
+            Ok(Some(VisionMetadata {
+                title: "A useful title".into(),
+                description: "A useful description".into(),
+            })),
+        )
+        .unwrap();
+        assert_eq!(vision_only.status, "vision_only");
+        assert!(vision_only.warning.unwrap().contains("Recognition failed"));
+    }
+
+    #[test]
+    fn toggles_vision_on_a_loaded_ocr_engine_and_persists_the_choice() {
+        let directory = tempfile::tempdir().unwrap();
+        let settings_path = directory.path().join("vision-settings.json");
+        let image_path = directory.path().join("blank.png");
+        image::RgbImage::from_pixel(64, 64, image::Rgb([255, 255, 255]))
+            .save(&image_path)
+            .unwrap();
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut settings = VisionSettings {
+            enabled: false,
+            ..VisionSettings::default()
+        };
+        fs::write(&settings_path, serde_json::to_vec(&settings).unwrap()).unwrap();
+        let engine = EnrichmentEngine::load(
+            &manifest_dir.join("resources/ocr/text-detection-ssfbcj81.rten"),
+            &manifest_dir.join("resources/ocr/text-rec-checkpoint-s52qdbqt.rten"),
+            settings_path.clone(),
+        )
+        .unwrap();
+        let ocr_only = engine.analyze(&image_path).unwrap();
+        assert!(matches!(ocr_only.status, "no_text" | "ocr_only"));
+        assert!(ocr_only.warning.is_none());
+
+        // An invalid opt-in must change neither the saved nor the live choice.
+        fs::write(&settings_path, serde_json::to_vec(&settings).unwrap()).unwrap();
+        settings.enabled = true;
+        settings.endpoint = "http://example.com/v1/chat/completions".into();
+        assert!(engine.update_vision_settings(settings.clone()).is_err());
+        assert!(
+            !serde_json::from_slice::<VisionSettings>(&fs::read(&settings_path).unwrap())
+                .unwrap()
+                .enabled
+        );
+        assert_eq!(engine.analyze(&image_path).unwrap().status, ocr_only.status);
+
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        settings.endpoint = format!(
+            "http://{}/v1/chat/completions",
+            server.local_addr().unwrap()
+        );
+        let worker = thread::spawn(move || {
+            let (mut connection, _) = server.accept().unwrap();
+            connection
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut received = Vec::new();
+            let mut buffer = [0; 4096];
+            loop {
+                let count = connection.read(&mut buffer).unwrap();
+                assert!(count > 0);
+                received.extend_from_slice(&buffer[..count]);
+                if let Some(end) = received.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&received[..end]).to_lowercase();
+                    let length: usize = headers
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length: "))
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    if received.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            assert!(String::from_utf8_lossy(&received).contains("data:image/png;base64,"));
+            let body = json!({"choices": [{"message": {"content": "{\"title\":\"Blank white canvas\",\"description\":\"An empty white image.\"}"}}]}).to_string();
+            write!(connection, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        });
+        engine.update_vision_settings(settings.clone()).unwrap();
+        assert!(
+            serde_json::from_slice::<VisionSettings>(&fs::read(&settings_path).unwrap())
+                .unwrap()
+                .enabled
+        );
+        let result = engine.analyze(&image_path).unwrap();
+        assert_eq!(result.status, "complete");
+        assert_eq!(result.title, "Blank white canvas");
+        worker.join().unwrap();
+
+        settings.enabled = false;
+        engine.update_vision_settings(settings.clone()).unwrap();
+        assert!(
+            !serde_json::from_slice::<VisionSettings>(&fs::read(&settings_path).unwrap())
+                .unwrap()
+                .enabled
+        );
+        // The server is gone: disabling must still leave OCR operational.
+        assert_eq!(engine.analyze(&image_path).unwrap().status, ocr_only.status);
+    }
+
+    #[test]
+    fn loads_legacy_settings_and_prefers_current_saved_choice() {
+        let directory = tempfile::tempdir().unwrap();
+        let settings_path = directory.path().join("vision-settings.json");
+        fs::write(directory.path().join("analysis-settings.json"),
+            r#"{"visionEnabled":true,"visionEndpoint":"http://localhost:1234/v1/chat/completions","visionModel":"legacy-model"}"#).unwrap();
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let load = || {
+            EnrichmentEngine::load(
+                &manifest.join("resources/ocr/text-detection-ssfbcj81.rten"),
+                &manifest.join("resources/ocr/text-rec-checkpoint-s52qdbqt.rten"),
+                settings_path.clone(),
+            )
+            .unwrap()
+        };
+        let engine = load();
+        assert!(engine.vision_settings().unwrap().enabled);
+        assert_eq!(engine.vision_settings().unwrap().model, "legacy-model");
+        engine
+            .update_vision_settings(VisionSettings {
+                enabled: false,
+                ..engine.vision_settings().unwrap()
+            })
+            .unwrap();
+        assert!(!load().vision_settings().unwrap().enabled);
     }
 
     #[test]

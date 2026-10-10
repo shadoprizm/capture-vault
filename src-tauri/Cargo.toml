@@ -1,6 +1,6 @@
 [package]
 name = "capture-vault"
-version = "0.3.2"
+version = "0.3.3"
 description = "A private, local-first screenshot library"
 authors = ["CaptureRecall contributors"]
 edition = "2024"
@@ -39,7 +39,9 @@ url = "2"
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "screenshot"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "screenshot", "global_shortcuts"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["sync", "macros"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # SCScreenshotManager is available on macOS 14.0 and later. Keeping this

@@ -25,7 +25,7 @@ Rust core
 
 ## Capture flow
 
-1. A capture starts from an interface button or a registered global shortcut. Shortcut choices are validated and persisted in local application storage. The native process registers them so a hidden webview is not needed to handle a shortcut.
+1. A capture starts from an interface button or a registered global shortcut. Shortcut choices are validated and persisted in local application storage. The native process registers them so a hidden webview is not needed to handle a shortcut. Wayland uses the Global Shortcuts portal and its desktop-provided trigger labels; other supported sessions use the native shortcut plugin.
 2. The React window hides so it is not included in the screenshot. A shortcut-triggered capture preserves the window's previous visibility instead of bringing a hidden window forward.
 3. The frontend invokes `capture_screen` with `area` or `screen` for buttons. The native shortcut handler uses the same import path and emits the new record to the interface.
 4. The active platform provider requests a screenshot: Linux uses `org.freedesktop.portal.Screenshot`; macOS uses ScreenCaptureKit; and Windows uses Windows Graphics Capture.
@@ -45,7 +45,7 @@ Rust core
 - The opted-in vision model receives the complete image and a strict JSON schema. Its prompt asks for the screen's application, activity, and purpose—not copied OCR—and treats all text inside the image as untrusted content rather than instructions. CaptureVault cannot control how the receiving service handles the image.
 - Raw detected text is stored separately from the title, description, and personal note so all visible text is searchable.
 - The database tracks whether a title or description has been edited. Re-analysis can replace an earlier generated suggestion but preserves user edits and never touches notes.
-- Records expose `pending`, `processing`, `complete`, `partial`, or `failed` status so the interface can distinguish searchable OCR from completed semantic analysis and offer a retry.
+- Records expose `pending`, `processing`, `complete`, `ocr_only`, `vision_only`, `no_text`, `partial`, or `failed` status so the interface can distinguish searchable OCR from completed semantic analysis and offer a retry. Disabled vision is a normal OCR-only result; service failures and OCR failures surface warnings independently.
 - The bundled recognition model targets Latin-alphabet text. Its source, pinned revision, license, and checksums are recorded in `src-tauri/resources/ocr/NOTICE.md`.
 
 ## Storage

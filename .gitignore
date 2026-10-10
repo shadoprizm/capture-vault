@@ -36,3 +36,6 @@ prime/
 *.njsproj
 *.sln
 *.sw?
+
+# Separate Sites source repository; never stage it into the desktop repository.
+/website/

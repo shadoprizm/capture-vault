@@ -315,12 +315,13 @@ dependencies = [
 
 [[package]]
 name = "capture-vault"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "ashpd",
  "base64 0.23.1",
  "chrono",
  "clipboard-rs",
+ "futures-util",
  "image",
  "ocrs",
  "reqwest",
@@ -336,6 +337,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tempfile",
  "thiserror 2.0.20",
+ "tokio",
  "url",
  "uuid",
  "windows-capture",
@@ -4294,8 +4296,20 @@ dependencies = [
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
+ "tokio-macros",
  "tracing",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.6",
 ]
 
 [[package]]
