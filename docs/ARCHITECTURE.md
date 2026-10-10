@@ -77,7 +77,7 @@ Images and metadata are deliberately separate:
 
 - The asset protocol is enabled only for the application-data directory.
 - The content security policy allows application assets and the Tauri local asset protocol only.
-- No remote image sources, telemetry, OCR API, or upload service are configured. OCR is local. Semantic vision is disabled by default; after explicit opt-in it is hard-limited to a loopback HTTP endpoint and refuses redirects. A user-configured tunnel can forward images to another computer, whose service is responsible for handling them.
+- The free capture and OCR workflow is local. An optional hosted backup client can upload one explicitly selected capture to `https://capturerecall.com`; its HTTPS requests refuse redirects and its device key remains in memory while Settings is open. It never starts automatic uploads. Restore verifies image size and SHA-256 before importing a new local copy. No telemetry or hosted OCR is configured. OCR is local. Semantic vision is disabled by default; after explicit opt-in it is hard-limited to a loopback HTTP endpoint and refuses redirects. A user-configured tunnel can forward images to another computer, whose service is responsible for handling them.
 - The XDG portal remains responsible for Wayland capture permissions and selection UI.
 
 ## Next architectural steps

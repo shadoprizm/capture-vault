@@ -241,6 +241,31 @@ impl CaptureStore {
         self.get(&id)
     }
 
+    pub fn restore_metadata(
+        &self,
+        id: &str,
+        metadata: &crate::cloud::CloudMetadata,
+    ) -> Result<CaptureRecord, StorageError> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let created_at = chrono::DateTime::parse_from_rfc3339(&metadata.created_at)
+            .map(|date| {
+                date.with_timezone(&Utc)
+                    .to_rfc3339_opts(SecondsFormat::Millis, true)
+            })
+            .unwrap_or_else(|_| Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
+        transaction.execute(
+            "UPDATE captures SET title=?1,description=?2,note=?3,tags_json=?4,favorite=?5,
+             ocr_text=?6,created_at=?7,title_edited=1,description_edited=1,enrichment_status='ocr_only'
+             WHERE id=?8",
+            params![clean_field(&metadata.title,240),clean_field(&metadata.description,2000),
+                clean_field(&metadata.note,4000),serde_json::to_string(&metadata.tags)?,
+                metadata.favorite,clean_field(&metadata.ocr_text,100000),created_at,id],
+        )?;
+        transaction.commit()?;
+        self.get(id)
+    }
+
     pub fn update_metadata(
         &self,
         id: &str,
@@ -644,6 +669,45 @@ mod tests {
                     .canonicalize()
                     .expect("canonical external directory")
             )
+        );
+    }
+
+    #[test]
+    fn restores_cloud_metadata_without_changing_the_original_capture() {
+        let directory = tempdir().expect("temporary directory");
+        let source = directory.path().join("source.png");
+        sample_png(&source);
+        let store = CaptureStore::new(directory.path().join("library")).expect("create store");
+        let original = store
+            .import_capture(&source, CaptureMode::Area)
+            .expect("original");
+        let restored = store
+            .import_capture(&source, CaptureMode::Area)
+            .expect("restored copy");
+        let metadata = crate::cloud::CloudMetadata {
+            title: "Recovered title".into(),
+            description: "Useful context".into(),
+            note: "Keep this note".into(),
+            tags: vec!["database".into()],
+            favorite: true,
+            ocr_text: "CREATE INDEX".into(),
+            capture_mode: "area".into(),
+            created_at: "2026-10-10T12:00:00Z".into(),
+        };
+        let recovered = store
+            .restore_metadata(&restored.id, &metadata)
+            .expect("restore metadata");
+        assert_eq!(recovered.note, metadata.note);
+        assert_eq!(recovered.ocr_text, metadata.ocr_text);
+        assert_eq!(recovered.tags, metadata.tags);
+        assert_eq!(recovered.created_at, "2026-10-10T12:00:00.000Z");
+        assert_eq!(
+            store.get(&original.id).expect("untouched original"),
+            original
+        );
+        assert_eq!(
+            fs::read(recovered.file_path).expect("recovered PNG"),
+            fs::read(source).expect("original PNG")
         );
     }
 

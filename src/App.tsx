@@ -11,6 +11,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
+import { CloudSettings } from "./components/CloudSettings";
 import { Icon } from "./components/Icon";
 import { version } from "../package.json";
 import "./App.css";
@@ -1042,6 +1043,8 @@ function App() {
                 {changingStorage ? "Moving…" : "Choose folder"}
               </button>
             </div>
+
+            <CloudSettings captures={captures} onRestore={(capture) => setCaptures((current) => [capture, ...current])} />
 
             <h3 className="settings-section-title">Image analysis</h3>
             <div className="settings-card analysis-setting">

@@ -230,3 +230,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). By participating, you agree to keep Capt
 ## License
 
 [MIT](LICENSE)
+
+## Optional paid hosted vault (implementation preview)
+
+The free local application remains available without accounts or payments. The
+new implementation adds explicit selected-screenshot backup and integrity-checked
+restore, with Personal private storage and Team shared libraries. These desktop
+controls are not in the published v0.3.3 installers yet.
+
+See [paid service implementation](docs/PAID_OPTIONS.md) and
+[planned launch pricing](https://capturerecall.com/pricing/). Checkout stays disabled
+until the actual Stripe account and a real test-payment flow are configured and
+verified. Hosted uploads are explicit; automatic background sync is not included.
