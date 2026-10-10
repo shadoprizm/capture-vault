@@ -35,4 +35,14 @@ The original development edits also remain in Git stash `CaptureRecall pre-conso
 
 ## Validation
 
+On the Mac, use the installed full Xcode and the supported deployment target in the validation shell, without changing machine-wide settings:
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export MACOSX_DEPLOYMENT_TARGET=14.0
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+The default Command Line Tools selection and implicit macOS 11 linker target failed Swift compatibility-library linking during consolidation. Full Xcode and an explicit macOS 14 target are required for this native check.
+
 Run frontend type checks and build, Rust format checks and tests on Linux, and Rust tests on the Mac for cross-platform changes. Portal permission dialogs and physical capture still require a supported native desktop session; unit tests do not establish those behaviors. Website publishing and desktop releases are separate operations.
