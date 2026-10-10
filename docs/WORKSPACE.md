@@ -1,6 +1,6 @@
 # CaptureRecall source of truth
 
-GitHub `main` in https://github.com/shadoprizm/capture-vault is the shared desktop baseline. On 2026-10-10 its verified commit was `ad298faf5015ec65847bb809009c50bd65c9f072`; the newest published preview was `v0.3.2`.
+GitHub `main` in https://github.com/shadoprizm/capture-vault is the shared desktop baseline. Reconciliation was merged through PR #3 on 2026-10-10 at `780b5a51ac2768b20e94992a1dc3d86476ea3a5c`, which is the code commit tagged `v0.3.3`. All six preview release assets are published. Later documentation commits may advance main without changing that release code.
 
 ## Active checkouts
 
@@ -10,11 +10,11 @@ GitHub `main` in https://github.com/shadoprizm/capture-vault is the shared deskt
 | Mac desktop | `/Users/jratelle/Coding Projects/capture-vault` | `codex/reconcile-linux-work` |
 | Website | `website/` inside the Linux project | Independent Sites repository, `main` |
 
-The reconciliation branch starts at current desktop main. It retains Wayland portal shortcuts, reports OCR-only and vision-only outcomes accurately, surfaces analysis warnings, accepts IPv6 loopback services, and saves vision choices atomically. Native Mac shortcut handling, permission fixes, capture window lifecycle, and editable endpoint/model settings remain from current main. Legacy Linux `analysis-settings.json` is read only when the current `vision-settings.json` is absent; the next save uses the current format. These additions are development work, not published release claims.
+The reconciliation branch starts at current desktop main. It retains Wayland portal shortcuts, reports OCR-only and vision-only outcomes accurately, surfaces analysis warnings, accepts IPv6 loopback services, and saves vision choices atomically. Native Mac shortcut handling, permission fixes, capture window lifecycle, and editable endpoint/model settings remain from current main. Legacy Linux `analysis-settings.json` is read only when the current `vision-settings.json` is absent; the next save uses the current format. These changes shipped in the v0.3.3 preview. Portal behavior still depends on the native desktop; Mac notarization remains pending.
 
 ## Website authority
 
-The website is https://capturerecall.com, owned by Sites project `appgprj_6ab44eb46e9481918d250f5f9479e7ce`. Its independent Git checkout is `website/`; its `.openai/hosting.json` declares that same project. The latest deployed version verified during consolidation was version 3, source commit `b04d2561c23928fde7e59107abd0b8c68372110b`, matching the clean local website checkout. Marketing publication on 2026-10-10 advanced the website to version 4 at source commit `cf0ff936f17946a786b21a3ebbf12731293c62db`. The Sites helper configures its source remote; use the Sites source workflow and fresh scoped credentials for future synchronization. Do not publish from a copied directory or assume desktop Git includes the website. Root Git ignores this nested repository.
+The website is https://capturerecall.com, owned by Sites project `appgprj_6ab44eb46e9481918d250f5f9479e7ce`. Its independent Git checkout is `website/`; its `.openai/hosting.json` declares that same project. The latest deployed version verified during consolidation was version 3, source commit `b04d2561c23928fde7e59107abd0b8c68372110b`, matching the clean local website checkout. Marketing publication on 2026-10-10 advanced the website to version 4 at source commit `cf0ff936f17946a786b21a3ebbf12731293c62db`. Production release follow-up published version 5 at source commit `17d2f29fe2918da956d59423e7dbc9597fef9219`, advertising verified v0.3.3 packages and checksums. The Sites helper configures its source remote; use the Sites source workflow and fresh scoped credentials for future synchronization. Do not publish from a copied directory or assume desktop Git includes the website. Root Git ignores this nested repository.
 
 ## Synchronization
 
@@ -46,3 +46,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 The default Command Line Tools selection and implicit macOS 11 linker target failed Swift compatibility-library linking during consolidation. Full Xcode and an explicit macOS 14 target are required for this native check.
 
 Run frontend type checks and build, Rust format checks and tests on Linux, and Rust tests on the Mac for cross-platform changes. Portal permission dialogs and physical capture still require a supported native desktop session; unit tests do not establish those behaviors. Website publishing and desktop releases are separate operations.
+
+## Production verification
+
+PR #3 CI and merged-main CI passed on Linux and Mac. Both v0.3.3 release workflows succeeded, including the Mac bundle signature check; the signature is ad-hoc, not Apple-notarized. All four installer digests match their published checksum files, and the downloaded DEB checksum and version/architecture were independently verified. Website version 5 deployment succeeded. Homepage and Linux guide mobile emulation passed at 390px width, including navigation and no document overflow. Physical capture and portal permission behavior still need broader native testing. GitHub Copilot review did not complete because its weekly rate limit was exhausted; this is not a completed independent code review.

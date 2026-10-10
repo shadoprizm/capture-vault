@@ -4,6 +4,8 @@ The first audience is Linux developers who save terminal errors, code snippets, 
 
 Working assumptions: free MIT desktop preview, useful trials before paid offers, CAD $0 spend. These replace unanswered preference questions and can be revised. Do not buy ads, priority listings, or subscriptions under this plan.
 
+Production follow-up: PR #3 is merged and v0.3.3 is published; website version 5 advertises the verified release. This document records the original v0.3.2 marketing sprint and prepared launch copy. Consult WORKSPACE.md for the current production source.
+
 ## Source and release
 
 Use the existing desktop checkouts and `codex/reconcile-linux-work`; see [WORKSPACE.md](WORKSPACE.md). Marketing advertises published **v0.3.2**, not branch-only reconciliation changes. The website lives in the independent `website/` Sites repository, project `appgprj_6ab44eb46e9481918d250f5f9479e7ce`. No new project clone is needed.
@@ -38,7 +40,7 @@ Native app capture cannot be exercised through the available browser-only comput
 
 Website version 4 deployment succeeded, and the custom domain serves the new guide. Homepage → walkthrough → Linux download was exercised in Chrome. Static checks passed for local links and fragments, JSON-LD, canonical presence, six sitemap URLs, JavaScript syntax, and retained Google verification. The downloaded DEB identifies `capture-recall` version `0.3.2`, architecture `amd64`, and its computed SHA-256 matches the advertised value. That verification download may increment GitHub counts; it is not an external trial.
 
-The browser viewport override did not produce the requested mobile width, so a true mobile visual check remains pending. Native app capture, OCR, and image transfer were not exercised during this marketing update. Existing reconciliation tests passed previously; this update changes static website content and documentation, so native tests were not repeated.
+Follow-up mobile emulation using the supported browser development controls passed on the homepage and Linux guide at 390px width; navigation worked and neither document overflowed horizontally. This does not substitute for physical-device testing. Native app capture, OCR, and image transfer were not exercised during this marketing update. Existing reconciliation tests passed previously; this update changes static website content and documentation, so native tests were not repeated.
 
 ## What a useful trial means
 
