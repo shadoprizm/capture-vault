@@ -3,6 +3,7 @@ mod enrichment;
 mod models;
 mod shortcuts;
 mod storage;
+mod wayland_shortcuts;
 
 use std::{
     path::{Path, PathBuf},
@@ -180,7 +181,7 @@ async fn capture_and_import(
         let id = created.id;
 
         tauri::async_runtime::spawn(async move {
-            match analyze_capture(store.clone(), engine, id.clone()).await {
+            match analyze_capture(store.clone(), engine, id.clone(), app.clone()).await {
                 Ok(updated) => {
                     let _ = app.emit("capture-enriched", updated);
                 }
@@ -265,7 +266,7 @@ async fn enrich_capture(
             .unwrap_or_else(|| "Local screenshot analysis is unavailable".into())
     })?;
     let store = state.store.clone();
-    match analyze_capture(store.clone(), engine, id.clone()).await {
+    match analyze_capture(store.clone(), engine, id.clone(), app.clone()).await {
         Ok(updated) => {
             let _ = app.emit("capture-enriched", updated.clone());
             Ok(updated)
@@ -283,6 +284,7 @@ async fn analyze_capture(
     store: CaptureStore,
     engine: Arc<EnrichmentEngine>,
     id: String,
+    app: AppHandle,
 ) -> Result<CaptureRecord, String> {
     let capture = store
         .set_enrichment_status(&id, "processing")
@@ -293,6 +295,9 @@ async fn analyze_capture(
             .await
             .map_err(|error| format!("Local analysis task stopped unexpectedly: {error}"))??;
 
+    if let Some(warning) = result.warning.as_ref() {
+        let _ = app.emit("capture-analysis-warning", warning);
+    }
     store
         .save_enrichment(
             &id,
@@ -340,10 +345,13 @@ fn copy_capture(id: String, state: State<'_, AppState>) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init());
+    if !wayland_shortcuts::uses_wayland_shortcuts() {
+        builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    }
+    builder
         .on_window_event(|window, event| {
             #[cfg(target_os = "macos")]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -357,6 +365,7 @@ pub fn run() {
             let _ = (window, event);
         })
         .setup(|app| {
+            app.manage(wayland_shortcuts::initialize(app.handle()));
             let data_dir = app.path().app_data_dir()?;
             let store = CaptureStore::new(data_dir.clone())?;
             // The configured library may be reached through a symlink (for
@@ -423,6 +432,9 @@ pub fn run() {
             get_analysis_settings,
             set_vision_settings,
             configure_shortcuts,
+            wayland_shortcuts::uses_wayland_shortcuts,
+            wayland_shortcuts::configure_wayland_shortcuts,
+            wayland_shortcuts::unregister_wayland_shortcuts,
             set_storage_location,
             capture_screen,
             update_capture_metadata,

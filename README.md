@@ -143,13 +143,27 @@ npm run tauri dev
 
 The browser-only interface preview is available with `npm run dev`, but screen capture and the persistent library require the Tauri desktop runtime.
 
+## Screenshot hotkeys
+
+Keep CaptureRecall running and change capture shortcuts in **Settings → Global shortcuts**.
+
+On Linux Wayland, CaptureRecall registers with the desktop's **Global Shortcuts
+portal**, so the keys work while other applications have focus. Approve the
+desktop shortcut dialog when prompted. The desktop chooses the final bindings;
+the active keys appear on CaptureRecall's capture buttons and update when changed
+in the desktop's Keyboard settings. Portable Linux builds install a hidden
+desktop identity so shortcut permissions can be remembered across launches.
+If the desktop does not provide this portal, CaptureRecall reports that global
+shortcuts are unavailable; an X11 session remains supported. Windows, macOS, and
+Linux X11 continue to use the native Tauri shortcut plugin.
+
 ## Optional semantic metadata
 
 OCR runs locally for every new capture. In **Settings → Image analysis**, you
 can opt in to AI-generated titles and descriptions, enter a service URL
 and model name, and save the choice without restarting the app. The choice is
-off by default and is kept in the application's local data folder. Existing
-captures can be analyzed again from their detail view.
+off by default and is kept in the application's local data folder. A saved opt-out
+takes precedence over launch variables. Existing captures can be analyzed again from their detail view.
 
 When enabled, CaptureRecall sends the complete image to an OpenAI-compatible
 service at `http://127.0.0.1:8083/v1/chat/completions` and uses
@@ -197,6 +211,10 @@ it outside the application.
 4. Add a Developer ID Application identity and notarize the macOS direct download.
 5. Validate and complete Windows capture with Windows Graphics Capture and signing.
 6. Add non-destructive image annotation and richer opt-in visual descriptions.
+
+## Working checkout
+
+See [docs/WORKSPACE.md](docs/WORKSPACE.md) for the desktop and website source locations, synchronization rules, and consolidation backup.
 
 ## Contributing
 

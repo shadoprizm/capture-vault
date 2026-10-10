@@ -33,6 +33,8 @@ type CaptureRecord = {
   enrichmentStatus:
     | "pending"
     | "processing"
+    | "ocr_only"
+    | "vision_only"
     | "complete"
     | "partial"
     | "no_text"
@@ -57,6 +59,8 @@ type ShortcutBinding = {
 };
 
 type ShortcutSettings = Record<CaptureMode, ShortcutBinding>;
+
+type ShortcutLabels = { area: string | null; screen: string | null };
 
 type VisionSettings = {
   enabled: boolean;
@@ -210,8 +214,12 @@ function enrichmentLabel(status: CaptureRecord["enrichmentStatus"]) {
       return "Analyzing locally…";
     case "complete":
       return "Semantic analysis complete";
+    case "ocr_only":
+      return "OCR ready; generated titles and descriptions are off";
+    case "vision_only":
+      return "Titles and descriptions ready; OCR needs another try";
     case "partial":
-      return "OCR ready; optional vision analysis is off or unavailable";
+      return "OCR ready; vision analysis needs another try";
     case "no_text":
       return "No readable text found";
     case "failed":
@@ -285,6 +293,8 @@ function App() {
     cloneShortcuts(shortcutSettings),
   );
   const [savingShortcuts, setSavingShortcuts] = useState(false);
+  const [waylandShortcuts, setWaylandShortcuts] = useState(false);
+  const [activeShortcutLabels, setActiveShortcutLabels] = useState<ShortcutLabels>({ area: null, screen: null });
   const [analysisSettings, setAnalysisSettings] = useState<AnalysisSettings | null>(null);
   const [draftVision, setDraftVision] = useState<VisionSettings | null>(null);
   const [savingVision, setSavingVision] = useState(false);
@@ -309,6 +319,7 @@ function App() {
   const selectedIdRef = useRef<string | null>(null);
   const captureInProgressRef = useRef(false);
   const shortcutSettingsRef = useRef(shortcutSettings);
+  const waylandShortcutsRef = useRef(false);
 
   const selected = captures.find((capture) => capture.id === selectedId) ?? null;
 
@@ -373,11 +384,34 @@ function App() {
   useEffect(() => {
     if (!isTauriRuntime) return;
 
-    void queueShortcutOperation(() => invoke("configure_shortcuts", {
-      settings: shortcutSettingsRef.current,
-    })).catch((shortcutError) => {
-      setError(`Global shortcuts are unavailable: ${errorMessage(shortcutError)}`);
+    let disposed = false;
+    let stopLabels: (() => void) | undefined;
+    let stopUnavailable: (() => void) | undefined;
+    void queueShortcutOperation(async () => {
+      waylandShortcutsRef.current = await invoke<boolean>("uses_wayland_shortcuts");
+      if (disposed) return;
+      setWaylandShortcuts(waylandShortcutsRef.current);
+      if (waylandShortcutsRef.current) {
+        const stops = await Promise.all([
+          listen<ShortcutLabels>("capture-shortcut-labels", ({ payload }) => {
+            if (!disposed) setActiveShortcutLabels(payload);
+          }),
+          listen<string>("capture-shortcut-unavailable", ({ payload }) => {
+            if (!disposed) setError(payload);
+          }),
+        ]);
+        if (disposed) { stops.forEach((stop) => stop()); return; }
+        [stopLabels, stopUnavailable] = stops;
+      }
+      await configureShortcutBindings(shortcutSettingsRef.current);
+    }).catch((shortcutError) => {
+      if (!disposed) setError(`Global shortcuts are unavailable: ${errorMessage(shortcutError)}`);
     });
+    return () => {
+      disposed = true;
+      stopLabels?.();
+      stopUnavailable?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -388,6 +422,7 @@ function App() {
     let stopFailed: (() => void) | undefined;
     let stopCreated: (() => void) | undefined;
     let stopCaptureFailed: (() => void) | undefined;
+    let stopWarning: (() => void) | undefined;
 
     void Promise.all([
       listen<CaptureRecord>("capture-created", ({ payload }) => {
@@ -409,22 +444,25 @@ function App() {
           setDraftDescription((current) => current || payload.description);
         }
       }),
+      listen<string>("capture-analysis-warning", ({ payload }) => setError(payload)),
       listen<string>("capture-enrichment-failed", ({ payload }) => {
         setError(payload);
         setAnalyzingId(null);
       }),
     ])
-      .then(([unlistenCreated, unlistenCaptureFailed, unlistenEnriched, unlistenFailed]) => {
+      .then(([unlistenCreated, unlistenCaptureFailed, unlistenEnriched, unlistenWarning, unlistenFailed]) => {
         if (disposed) {
           unlistenCreated();
           unlistenCaptureFailed();
           unlistenEnriched();
+          unlistenWarning();
           unlistenFailed();
           return;
         }
         stopCreated = unlistenCreated;
         stopCaptureFailed = unlistenCaptureFailed;
         stopEnriched = unlistenEnriched;
+        stopWarning = unlistenWarning;
         stopFailed = unlistenFailed;
       })
       .catch((listenError) => setError(errorMessage(listenError)));
@@ -434,6 +472,7 @@ function App() {
       stopCreated?.();
       stopCaptureFailed?.();
       stopEnriched?.();
+      stopWarning?.();
       stopFailed?.();
     };
   }, []);
@@ -444,6 +483,15 @@ function App() {
     setDraftNote(selected?.note ?? "");
     setDraftTags(selected?.tags.join(", ") ?? "");
   }, [selectedId]);
+
+  async function configureShortcutBindings(settings: ShortcutSettings) {
+    if (waylandShortcutsRef.current) {
+      const labels = await invoke<ShortcutLabels>("configure_wayland_shortcuts", { settings });
+      setActiveShortcutLabels(labels);
+    } else {
+      await invoke("configure_shortcuts", { settings });
+    }
+  }
 
   async function saveShortcutSettings() {
     const next = cloneShortcuts(draftShortcuts);
@@ -461,13 +509,16 @@ function App() {
     const previous = cloneShortcuts(shortcutSettingsRef.current);
 
     try {
-      await queueShortcutOperation(() => invoke("configure_shortcuts", { settings: next }));
+      await queueShortcutOperation(() => configureShortcutBindings(next));
       localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(next));
       shortcutSettingsRef.current = next;
       setShortcutSettings(next);
       setDraftShortcuts(cloneShortcuts(next));
       setNotice("Global shortcuts updated.");
     } catch (shortcutError) {
+      if (waylandShortcutsRef.current) {
+        await queueShortcutOperation(() => configureShortcutBindings(previous)).catch(() => undefined);
+      }
       shortcutSettingsRef.current = previous;
       setError(
         `Could not register those shortcuts. Another app may already use one: ${errorMessage(shortcutError)}`,
@@ -549,9 +600,11 @@ function App() {
     setError(null);
     const appWindow = getCurrentWindow();
     let wasVisible = true;
+    let wasMinimized = false;
 
     try {
       wasVisible = await appWindow.isVisible();
+      wasMinimized = await appWindow.isMinimized();
       await appWindow.hide();
       await new Promise((resolve) => window.setTimeout(resolve, 180));
       const created = await invoke<CaptureRecord>("capture_screen", { mode });
@@ -565,7 +618,7 @@ function App() {
       const message = errorMessage(captureError);
       if (!message.toLowerCase().includes("cancel")) setError(message);
     } finally {
-      if (wasVisible) await appWindow.show();
+      if (wasVisible && !wasMinimized) await appWindow.show();
       if (trigger === "button") await appWindow.setFocus();
       captureInProgressRef.current = false;
       setCapturing(null);
@@ -642,9 +695,9 @@ function App() {
       setDraftTitle((current) => current || updated.title);
       setDraftDescription((current) => current || updated.description);
       setNotice(
-        updated.enrichmentStatus === "partial"
-          ? "OCR is searchable, but the vision service was unavailable."
-          : "Semantic title, description, and searchable text are ready.",
+        updated.enrichmentStatus === "complete"
+          ? "Title, description, and searchable text are ready."
+          : enrichmentLabel(updated.enrichmentStatus),
       );
     } catch (analysisError) {
       setCaptures((current) =>
@@ -857,7 +910,7 @@ function App() {
               <Icon name="monitor" />
               {capturing === "screen" ? "Capturing…" : "Full screen"}
               {shortcutSettings.screen.enabled && (
-                <kbd className="button-shortcut">{shortcutLabel(shortcutSettings.screen)}</kbd>
+                <kbd className="button-shortcut">{activeShortcutLabels.screen ?? shortcutLabel(shortcutSettings.screen)}</kbd>
               )}
             </button>
             <button
@@ -868,7 +921,7 @@ function App() {
               <Icon name="crop" />
               {capturing === "area" ? "Select an area…" : "Capture area"}
               {shortcutSettings.area.enabled && (
-                <kbd className="button-shortcut">{shortcutLabel(shortcutSettings.area)}</kbd>
+                <kbd className="button-shortcut">{activeShortcutLabels.area ?? shortcutLabel(shortcutSettings.area)}</kbd>
               )}
             </button>
           </div>}
@@ -1018,7 +1071,7 @@ function App() {
                 {analysisSettings?.visionError && <p className="analysis-error">{analysisSettings.visionError}</p>}
                 <div className="vision-fields">
                   <label>
-                    Service URL on this Mac
+                    Service URL on this computer
                     <input
                       type="url"
                       value={draftVision?.endpoint ?? ""}
@@ -1076,7 +1129,9 @@ function App() {
               <p>
                 {isMacOS
                   ? "Shortcuts keep working when you close the library window. Click CaptureRecall in the Dock to reopen it, or choose Quit CaptureRecall to stop the app. macOS may reserve some key combinations."
-                  : "Shortcuts are registered only while CaptureRecall is running. Ubuntu may reserve some combinations for system actions."}
+                  : waylandShortcuts
+                    ? "Approve the desktop shortcut dialog when prompted. Your desktop controls the final keys; the active combinations appear on the capture buttons. You can change them in your desktop’s Keyboard settings."
+                    : "Shortcuts are registered only while CaptureRecall is running. Your desktop may reserve some combinations for system actions."}
               </p>
             </div>
 
