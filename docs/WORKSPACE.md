@@ -14,7 +14,7 @@ The reconciliation branch starts at current desktop main. It retains Wayland por
 
 ## Website authority
 
-The website is https://capturerecall.com, owned by Sites project `appgprj_6ab44eb46e9481918d250f5f9479e7ce`. Its independent Git checkout is `website/`; its `.openai/hosting.json` declares that same project. The latest deployed version verified during consolidation was version 3, source commit `b04d2561c23928fde7e59107abd0b8c68372110b`, matching the clean local website checkout. It has no ordinary `origin` remote; use the Sites source workflow and fresh scoped credentials for future synchronization. Do not publish from a copied directory or assume desktop Git includes the website. Root Git ignores this nested repository.
+The website is https://capturerecall.com, owned by Sites project `appgprj_6ab44eb46e9481918d250f5f9479e7ce`. Its independent Git checkout is `website/`; its `.openai/hosting.json` declares that same project. The latest deployed version verified during consolidation was version 3, source commit `b04d2561c23928fde7e59107abd0b8c68372110b`, matching the clean local website checkout. Marketing publication on 2026-10-10 advanced the website to version 4 at source commit `cf0ff936f17946a786b21a3ebbf12731293c62db`. The Sites helper configures its source remote; use the Sites source workflow and fresh scoped credentials for future synchronization. Do not publish from a copied directory or assume desktop Git includes the website. Root Git ignores this nested repository.
 
 ## Synchronization
 
