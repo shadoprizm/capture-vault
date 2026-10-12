@@ -46,3 +46,11 @@ remains unverified because ChatGPT sign-in returned platform errors during QA;
 actual production subscription webhook delivery also remains unverified.
 Native desktop controls are in the reconciliation branch/PR, not the published
 v0.3.3 installers. See PAID_OPTIONS.md.
+
+## Desktop release update — October 12, 2026
+
+Version 0.3.4 publishes the hosted desktop controls for Linux x86_64 and Apple
+Silicon macOS 14+. Connect in Settings → Optional hosted vault with the Library
+ID and Device key from the website account. Connection is verified before
+backup is enabled; uploads remain explicit and keys clear when leaving Settings.
+All installer digests and both native release workflows were verified.

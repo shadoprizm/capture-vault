@@ -20,12 +20,12 @@ product rename.
 
 ## Download for macOS
 
-CaptureRecall v0.3.3 supports Apple Silicon Macs running macOS 14 or newer. It
+CaptureRecall v0.3.4 supports Apple Silicon Macs running macOS 14 or newer. It
 captures the main display with ScreenCaptureKit and selected regions with the
 native macOS crosshair picker. The app hides itself before capture, runs OCR on
 device, and keeps the library local by default.
 
-[Download the latest macOS DMG](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.3).
+[Download the latest macOS DMG](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.4).
 
 The current preview is ad-hoc signed while the project awaits a Developer ID
 Application certificate. macOS may require approval from **System Settings →
@@ -35,27 +35,27 @@ the required certificate and credentials are configured.
 
 ## Download for Linux
 
-CaptureRecall v0.3.3 is an x86_64 Linux prerelease. Choose the package that fits
-your desktop, or visit the [full v0.3.3 release](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.3)
+CaptureRecall v0.3.4 is an x86_64 Linux prerelease. Choose the package that fits
+your desktop, or visit the [full v0.3.4 release](https://github.com/shadoprizm/capture-vault/releases/tag/v0.3.4)
 for its RPM package and SHA-256 checksums.
 
 ### Ubuntu or Debian
 
-[Download the `.deb` installer](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.3/CaptureRecall_0.3.3_amd64.deb),
+[Download the `.deb` installer](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.4/CaptureRecall_0.3.4_amd64.deb),
 then run this from the directory containing the downloaded file:
 
 ```bash
-sudo apt install ./CaptureRecall_0.3.3_amd64.deb
+sudo apt install ./CaptureRecall_0.3.4_amd64.deb
 ```
 
 ### Portable Linux build
 
-[Download the AppImage](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.3/CaptureRecall_0.3.3_amd64.AppImage),
+[Download the AppImage](https://github.com/shadoprizm/capture-vault/releases/download/v0.3.4/CaptureRecall_0.3.4_amd64.AppImage),
 make it executable, and launch it:
 
 ```bash
-chmod +x CaptureRecall_0.3.3_amd64.AppImage
-./CaptureRecall_0.3.3_amd64.AppImage
+chmod +x CaptureRecall_0.3.4_amd64.AppImage
+./CaptureRecall_0.3.4_amd64.AppImage
 ```
 
 ## Compatibility and support status
@@ -78,6 +78,13 @@ chmod +x CaptureRecall_0.3.3_amd64.AppImage
 - Copy a capture as both an image and PNG file for pasting or attaching
 - Drag a capture directly into another app or folder as a native file copy
 - Permanently delete a capture and its metadata
+
+### New in v0.3.4
+
+- Connect to a hosted library in Settings using the Library ID and Device key from your website account
+- Verify the connection before backing up a selected screenshot with its existing metadata
+- Browse hosted captures and restore a verified PNG as a new local copy
+- Keep keys in memory only while Settings is open; no automatic uploads
 
 ### New in v0.3.3
 

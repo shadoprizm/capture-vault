@@ -1,6 +1,6 @@
 # Optional paid service implementation
 
-Version 0.3.4 adds desktop hosted-vault controls. Version 0.3.3 and earlier cannot accept device keys. Verify the v0.3.4 release assets before advertising an available installer.
+Version 0.3.4 adds desktop hosted-vault controls. Version 0.3.3 and earlier cannot accept device keys. The v0.3.4 Linux DEB, RPM, AppImage and Apple Silicon DMG are published; all four downloaded installers match their published SHA-256 checksums and GitHub asset digests. Both native release workflows passed.
 
 Setup: open Settings → Optional hosted vault, paste the Library ID and Device key from the website account, and select Connect hosted library. The connection is checked before backup is enabled. Select one local screenshot to back up, or restore a hosted screenshot as a new local copy. Leaving Settings clears the key; reopen Settings and paste it again to reconnect.
 
@@ -11,3 +11,5 @@ Payments use server-created Stripe subscription Checkout sessions, raw signature
 The service supports explicit backup/access across devices, rather than automatic synchronization or conflict merging. Browser uploads do not generate OCR. Team invitations grant access to the specified ChatGPT sign-in email; no email is sent. Every route checks current ownership/membership and paid seats. Owners retain export access after expiry, while uploads and shared access stop.
 
 Desktop verification requires frontend check/build and native fmt/tests on Linux and Mac. Hosted verification requires service tests, type checking, Sites build, preview and successful production deployment. The service tests include signed-event isolation from other products on the shared Stripe account. End-to-end signed-in hosted Checkout and actual Stripe subscription webhook delivery remain unverified. Browser QA reached ChatGPT sign-in but the platform returned HTTP 400 invalid content type and invalid_state errors on both the custom domain and generated Site origin; this is an unresolved sign-in issue. Local HMAC delivery and real subscription API tests do not establish those paths. No account-wide merchant settings or other apps' billing resources were modified.
+
+Release verification on October 12, 2026: both platforms passed frontend and native checks, with 23 native tests passing and one sample OCR integration test ignored on each platform. All 14 hosted service tests and website type checks passed. Browser preview confirmed the desktop connection gate and key clearing on leaving Settings. A production request made with the desktop HTTP client reached the live device API and returned the expected JSON 401 for a fabricated key. This does not establish a successful signed-in production backup/restore using a valid account key.

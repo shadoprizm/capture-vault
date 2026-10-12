@@ -1,6 +1,6 @@
 # CaptureRecall source of truth
 
-GitHub `main` in https://github.com/shadoprizm/capture-vault is the shared desktop baseline. Reconciliation was merged through PR #3 on 2026-10-10 at `780b5a51ac2768b20e94992a1dc3d86476ea3a5c`, which is the code commit tagged `v0.3.3`. All six preview release assets are published. Later documentation commits may advance main without changing that release code.
+GitHub `main` in https://github.com/shadoprizm/capture-vault is the shared desktop baseline. Hosted desktop setup was merged through PR #5 on 2026-10-12 at `264196e8d2b0f22498033476bff4c0a745118af9`. The v0.3.4 code tag points to `4bf1d0daac2c6f38e5b01b45e683eff52cb8db9b`; all six preview assets are published and all four downloaded installers match both GitHub asset digests and their checksum files. Reconciliation was merged through PR #3 on 2026-10-10 at `780b5a51ac2768b20e94992a1dc3d86476ea3a5c`, which is the code commit tagged `v0.3.3`. All six preview release assets are published. Later documentation commits may advance main without changing that release code.
 
 ## Active checkouts
 
@@ -50,3 +50,11 @@ Run frontend type checks and build, Rust format checks and tests on Linux, and R
 ## Production verification
 
 PR #3 CI and merged-main CI passed on Linux and Mac. Both v0.3.3 release workflows succeeded, including the Mac bundle signature check; the signature is ad-hoc, not Apple-notarized. All four installer digests match their published checksum files, and the downloaded DEB checksum and version/architecture were independently verified. Website version 5 deployment succeeded. Homepage and Linux guide mobile emulation passed at 390px width, including navigation and no document overflow. Physical capture and portal permission behavior still need broader native testing. GitHub Copilot review did not complete because its weekly rate limit was exhausted; this is not a completed independent code review.
+
+## Hosted desktop setup release — October 12, 2026
+
+Version 0.3.4 adds Settings → Optional hosted vault with Library ID, Device key, and Connect hosted library. The app checks access before enabling selected-screenshot backup and supports integrity-checked restore. The key clears when leaving Settings. The free local app still works without an account. Version 0.3.3 and earlier cannot accept a device key.
+
+Website version 11, source `b769411668a2ca320b32f8999d87ce40ab8d4742`, deployed successfully to `https://capturerecall.shadoprizm.chatgpt.site` and is served at capturerecall.com. Account setup instructions, copy buttons, download links, installer sizes and digests now match v0.3.4. Selecting another library clears the previous displayed key. Both release workflows, PR #5 CI, and merged-main CI passed on Linux and Mac. All four installer downloads match GitHub digests and checksum files; the DEB reports version 0.3.4 and amd64. Both packages built the same frontend asset verified in the browser preview. Mac signature verification passed with an ad-hoc signature; notarization remains pending.
+
+The production device API returned the expected JSON 401 to a fabricated key sent with the desktop HTTP client. Valid-key production backup/restore and physical capture still require native account/device validation. No customer screenshots were used for verification.
