@@ -171,11 +171,23 @@ pub fn restore(
         MAX_PNG,
     )?;
     verify_download(&bytes, &capture)?;
-    let mut temporary =
-        tempfile::NamedTempFile::new().map_err(|_| "Could not prepare the restored screenshot.")?;
+    import_download(store, &bytes, &capture.metadata)
+}
+
+fn import_download(
+    store: &CaptureStore,
+    bytes: &[u8],
+    metadata: &CloudMetadata,
+) -> Result<CaptureRecord, String> {
+    // Image import identifies the format from the path. Keep the PNG extension
+    // on the verified download so the decoder can recognize the temporary file.
+    let mut temporary = tempfile::Builder::new()
+        .suffix(".png")
+        .tempfile()
+        .map_err(|_| "Could not prepare the restored screenshot.")?;
     std::io::Write::write_all(&mut temporary, &bytes)
         .map_err(|_| "Could not save the restored screenshot.")?;
-    let mode = if capture.metadata.capture_mode == "area" {
+    let mode = if metadata.capture_mode == "area" {
         CaptureMode::Area
     } else {
         CaptureMode::Screen
@@ -183,7 +195,6 @@ pub fn restore(
     let record = store
         .import_capture(temporary.path(), mode)
         .map_err(|e| e.to_string())?;
-    let metadata = &capture.metadata;
     let result = store.restore_metadata(&record.id, metadata);
     if result.is_err() {
         let _ = store.delete(&record.id);
@@ -219,6 +230,39 @@ mod tests {
             })
             .is_err()
         );
+    }
+    #[test]
+    fn verified_png_download_imports_with_metadata_as_a_new_capture() {
+        let root = tempfile::tempdir().unwrap();
+        let store = CaptureStore::new(root.path().to_path_buf()).unwrap();
+        let image = image::RgbImage::from_pixel(8, 6, image::Rgb([24, 96, 48]));
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+        let metadata = CloudMetadata {
+            title: "Restore regression".into(),
+            description: "Verified PNG download".into(),
+            note: "Keep this note".into(),
+            tags: vec!["round-trip".into()],
+            favorite: true,
+            ocr_text: "Retained OCR".into(),
+            capture_mode: "area".into(),
+            created_at: "2026-10-12T12:00:00.000Z".into(),
+        };
+        let first = import_download(&store, png.get_ref(), &metadata).unwrap();
+        let second = import_download(&store, png.get_ref(), &metadata).unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!((first.width, first.height), (8, 6));
+        assert_eq!(std::fs::read(&first.file_path).unwrap(), *png.get_ref());
+        assert_eq!(first.title, metadata.title);
+        assert_eq!(first.description, metadata.description);
+        assert_eq!(first.note, metadata.note);
+        assert_eq!(first.tags, metadata.tags);
+        assert_eq!(first.favorite, metadata.favorite);
+        assert_eq!(first.ocr_text, metadata.ocr_text);
+        assert_eq!(first.capture_mode, metadata.capture_mode);
+        assert_eq!(first.created_at, metadata.created_at);
     }
     #[test]
     fn corrupted_download_is_rejected() {
