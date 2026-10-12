@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 type Capture = { id: string; title: string; createdAt: string };
+type HostedPage = { captures: HostedCapture[]; nextCursor: string | null };
 type HostedCapture = {
   id: string;
   metadata: { title: string; createdAt: string };
@@ -18,6 +19,7 @@ export function CloudSettings<T extends Capture>({
     [hosted, setHosted] = useState<HostedCapture[]>([]),
     [nextCursor, setNextCursor] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
+    [connected, setConnected] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const connection = { workspace: workspace.trim(), token: token.trim() };
@@ -46,18 +48,24 @@ export function CloudSettings<T extends Capture>({
             automatically.
           </p>
           <p>
-            Open <code>https://capturerecall.com/account/</code> in your browser
-            to subscribe and create a device key. Keys stay in memory for while
-            this Settings screen is open and expire after 90 days.
+            In your website account, open “Connect your desktop app” and create a
+            device key. Copy the Library ID and Device key into the fields below,
+            then select Connect hosted library. Keys are cleared when you leave
+            Settings and expire after 90 days.
           </p>
           <label>
             Library ID
             <input
               value={workspace}
+              placeholder="Library ID from your website account"
+              disabled={busy}
               onChange={(e) => {
                 setWorkspace(e.target.value);
                 setHosted([]);
                 setNextCursor(null);
+                setConnected(false);
+                setNotice("");
+                setError("");
               }}
               autoComplete="off"
               spellCheck={false}
@@ -68,15 +76,39 @@ export function CloudSettings<T extends Capture>({
             <input
               type="password"
               value={token}
+              placeholder="Paste your device key here"
+              disabled={busy}
               onChange={(e) => {
                 setToken(e.target.value);
                 setHosted([]);
                 setNextCursor(null);
+                setConnected(false);
+                setNotice("");
+                setError("");
               }}
               autoComplete="off"
               spellCheck={false}
             />
           </label>
+          <div className="settings-actions">
+            <button
+              className="primary-action"
+              disabled={busy || !workspace.trim() || !token.trim()}
+              onClick={() => void action(async () => {
+                setConnected(false);
+                setHosted([]);
+                setNextCursor(null);
+                const page = await invoke<HostedPage>("cloud_list", { connection, cursor: null });
+                setHosted(page.captures);
+                setNextCursor(page.nextCursor);
+                setConnected(true);
+                setNotice("Connected to your hosted library. Choose a screenshot to back up, or restore a hosted copy below.");
+              })}
+            >
+              {connected ? "Check connection" : "Connect hosted library"}
+            </button>
+          </div>
+          <p role="status">{connected ? "Connected · key kept only while Settings is open" : "Enter your Library ID and Device key to connect."}</p>
           <label>
             Screenshot to back up
             <select
@@ -94,7 +126,7 @@ export function CloudSettings<T extends Capture>({
           <div className="settings-actions">
             <button
               className="primary-action"
-              disabled={busy || !selected || !workspace || !token}
+              disabled={busy || !selected || !connected}
               onClick={() =>
                 void action(async () => {
                   await invoke("cloud_upload_capture", {
@@ -111,13 +143,10 @@ export function CloudSettings<T extends Capture>({
             </button>
             <button
               className="secondary-action"
-              disabled={busy || !workspace || !token}
+              disabled={busy || !connected}
               onClick={() =>
                 void action(async () => {
-                  const page = await invoke<{
-                    captures: HostedCapture[];
-                    nextCursor: string | null;
-                  }>("cloud_list", { connection, cursor: null });
+                  const page = await invoke<HostedPage>("cloud_list", { connection, cursor: null });
                   setHosted(page.captures);
                   setNextCursor(page.nextCursor);
                   setNotice(
@@ -135,6 +164,8 @@ export function CloudSettings<T extends Capture>({
                 setToken("");
                 setHosted([]);
                 setNextCursor(null);
+                setConnected(false);
+                setError("");
                 setNotice(
                   "Disconnected from this app. Revoke the device key on the website to invalidate it everywhere.",
                 );
@@ -156,10 +187,7 @@ export function CloudSettings<T extends Capture>({
               disabled={busy}
               onClick={() =>
                 void action(async () => {
-                  const page = await invoke<{
-                    captures: HostedCapture[];
-                    nextCursor: string | null;
-                  }>("cloud_list", { connection, cursor: nextCursor });
+                  const page = await invoke<HostedPage>("cloud_list", { connection, cursor: nextCursor });
                   setHosted((current) => [...current, ...page.captures]);
                   setNextCursor(page.nextCursor);
                 })

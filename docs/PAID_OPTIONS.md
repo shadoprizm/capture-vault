@@ -1,6 +1,8 @@
 # Optional paid service implementation
 
-Implemented on `codex/reconcile-linux-work`; do not describe its desktop controls as present in the published v0.3.3 packages.
+Version 0.3.4 adds desktop hosted-vault controls. Version 0.3.3 and earlier cannot accept device keys. Verify the v0.3.4 release assets before advertising an available installer.
+
+Setup: open Settings → Optional hosted vault, paste the Library ID and Device key from the website account, and select Connect hosted library. The connection is checked before backup is enabled. Select one local screenshot to back up, or restore a hosted screenshot as a new local copy. Leaving Settings clears the key; reopen Settings and paste it again to reconnect.
 
 The free local MIT desktop app remains functional without an account or payment. The separate `website/` Sites repository implements Personal private hosted backup (CAD $8/month, 1 GB) and Team shared libraries (CAD $15/seat/month, minimum two seats, 5 GB pooled per seat). Native desktop backup sends only a chosen capture and its existing OCR/notes/tags. Restore downloads a private PNG, verifies size and SHA-256, and creates a new local capture with retained metadata. Device keys are held in memory while Settings remains open.
 

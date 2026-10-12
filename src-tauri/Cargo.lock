@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "capture-vault"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "ashpd",
  "base64 0.23.1",
