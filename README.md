@@ -230,3 +230,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). By participating, you agree to keep Capt
 ## License
 
 [MIT](LICENSE)
+
+## Optional hosted vault (v0.3.4)
+
+The free local application remains available without accounts or payments. The
+new implementation adds explicit selected-screenshot backup and integrity-checked
+restore, with Personal private storage and Team shared libraries. These desktop
+controls require v0.3.4 or later; v0.3.3 cannot accept a device key.
+
+Open Settings → Optional hosted vault. Paste the Library ID and Device key
+from your website account, then select Connect hosted library. Choose a local
+screenshot to back up, or restore a hosted copy. The key is cleared when you
+leave Settings. Nothing uploads automatically.
+
+See [paid service implementation](docs/PAID_OPTIONS.md) and
+[hosted plans](https://capturerecall.com/pricing/). Billing activation and
+verification limits are recorded in the paid service implementation document. Hosted uploads are explicit; automatic background sync is not included.

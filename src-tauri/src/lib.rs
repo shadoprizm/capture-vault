@@ -1,4 +1,5 @@
 mod capture;
+mod cloud;
 mod enrichment;
 mod models;
 mod shortcuts;
@@ -91,6 +92,40 @@ async fn configure_shortcuts(
     tauri::async_runtime::spawn_blocking(move || registry.configure(&app, settings))
         .await
         .map_err(|error| format!("Shortcut registration stopped unexpectedly: {error}"))?
+}
+
+#[tauri::command]
+async fn cloud_list(
+    connection: cloud::CloudConnection,
+    cursor: Option<String>,
+) -> Result<cloud::CloudPage, String> {
+    tauri::async_runtime::spawn_blocking(move || cloud::list(&connection, cursor))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cloud_upload_capture(
+    connection: cloud::CloudConnection,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let store = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || cloud::upload(&connection, &store, &id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn cloud_restore_capture(
+    connection: cloud::CloudConnection,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<CaptureRecord, String> {
+    let store = state.store.clone();
+    tauri::async_runtime::spawn_blocking(move || cloud::restore(&connection, &store, &id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -428,6 +463,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_captures,
+            cloud_list,
+            cloud_upload_capture,
+            cloud_restore_capture,
             get_storage_location,
             get_analysis_settings,
             set_vision_settings,

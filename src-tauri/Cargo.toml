@@ -1,6 +1,6 @@
 [package]
 name = "capture-vault"
-version = "0.3.3"
+version = "0.3.4"
 description = "A private, local-first screenshot library"
 authors = ["CaptureRecall contributors"]
 edition = "2024"
@@ -29,12 +29,14 @@ clipboard-rs = { version = "0.3.5", features = ["wayland"] }
 base64 = "0.23.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ocrs = { version = "0.13.1", default-features = false, features = ["rten"] }
-reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls", "query"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 rten = { version = "0.26.0", default-features = false, features = ["mmap", "rten_format"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+sha2 = "0.10"
+tempfile = "3"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 
@@ -47,7 +49,6 @@ tokio = { version = "1", features = ["sync", "macros"] }
 # SCScreenshotManager is available on macOS 14.0 and later. Keeping this
 # target-specific prevents the Swift bridge from affecting Linux and Windows.
 screencapturekit = { version = "10.0.3", features = ["macos_14_0"] }
-tempfile = "3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Uses Windows.Graphics.Capture and the Win32 IGraphicsCaptureItemInterop API.

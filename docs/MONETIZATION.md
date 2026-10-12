@@ -34,3 +34,15 @@ The next desktop adoption bet is importing existing screenshots, if trials confi
 ## Revenue illustration
 
 Twenty teams with five paid seats each at CAD $15/seat/month would produce CAD $1,500 monthly gross subscription revenue, before costs and taxes. This is arithmetic to size the experiment, not a forecast. Track qualified paid-pilot interest and repeat retrieval use, not downloads alone.
+
+## Implementation update — October 11, 2026
+
+The optional hosted-vault implementation uses Personal CAD $8/month and Team
+CAD $15/seat/month, with explicit uploads and bounded storage. Live purchases
+are enabled in production with CaptureRecall-specific resources in the Astra
+Web Dev Stripe account. Tax settings are active; unpaid live Checkout and portal
+creation passed. No live verification charge was made. Full browser checkout
+remains unverified because ChatGPT sign-in returned platform errors during QA;
+actual production subscription webhook delivery also remains unverified.
+Native desktop controls are in the reconciliation branch/PR, not the published
+v0.3.3 installers. See PAID_OPTIONS.md.
