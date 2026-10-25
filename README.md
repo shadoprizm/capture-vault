@@ -18,6 +18,34 @@ The repository retains its original `capture-vault` name and stable application
 identifier so existing libraries and operating-system permissions survive the
 product rename.
 
+## Website Screenshot API for developers
+
+Build public website screenshots into your backend with the
+[CaptureRecall developer API](https://capturerecall.com/developers/). Choose PNG
+or JPEG, desktop or mobile viewports, and full-page capture. Return the image
+directly or save a PNG to your private hosted library on an active hosted plan.
+The API runs in cloud-hosted browsers; local desktop capture and OCR still stay
+on your device by default.
+
+- Free account: 25 capture attempts per UTC calendar month, subject to shared
+  free capacity. No card required.
+- Personal: 1,000 attempts/month included in the existing CAD $8/month plan.
+- Team: 1,000 attempts per paid seat/month, pooled across the account’s keys,
+  included in the existing CAD $15/seat/month plan (two seats minimum).
+- Revocable backend API keys, hard monthly quotas, six attempts per minute,
+  three in flight, and no automatic overage charges. Failed website captures
+  and cache hits count; invalid input and unauthorized requests do not.
+
+[Get a developer key](https://capturerecall.com/developers/dashboard/) ·
+[API examples and limits](https://capturerecall.com/developers/#reference) ·
+[OpenAPI specification](https://capturerecall.com/openapi.json) ·
+[Plans](https://capturerecall.com/pricing/)
+
+The free desktop app remains MIT licensed. The optional hosted services and API
+follow the [service terms](https://capturerecall.com/terms/); the API does not
+capture logged-in pages or private networks and has no contractual uptime
+commitment. Some sites require a manual screenshot fallback.
+
 ## Download for macOS
 
 CaptureRecall v0.3.5 supports Apple Silicon Macs running macOS 14 or newer. It
