@@ -67,7 +67,7 @@ Website version 12, source `6d9f742ecdd09478f0053fcb9b68b39d0b5bcdf6`, advertise
 
 ## Developer API publication — October 25, 2026
 
-Website version 13, source `428f853c285160f95d4813b227ef12fe2b0474bb`, deployed
+Website version 14, source `3c62e3d805f207143bfe4f43abf82c50dc9db2bc`, deployed
 successfully at https://capturerecall.com using environment revision 5. The Mac
 website checkout is `/Users/jratelle/Coding Projects/capture-vault/website`, a
 separate Sites repository with the same project identity as the Linux checkout.
@@ -77,14 +77,20 @@ a folder copy. Desktop source and packages remain v0.3.5.
 
 The publication adds developer keys, website capture, usage and hard quotas,
 private PNG library saving, OpenAPI documentation, updated product/pricing/privacy
-copy, structured data and crawler facts. Twenty-five service/marketing tests,
-TypeScript checking and the production build passed. Five shared renderer tests
+copy, structured data and crawler facts. Twenty-six service/marketing tests,
+TypeScript checking and the production build passed. Six shared renderer tests
 and an actual cross-service handler/ticket contract test also passed. Local D1
 HTTP tests verified key creation/authentication/revocation and ticket replay
 rejection. The production runtime dependency audit reports zero advisories after
 compatible Next, Sharp and supporting dependency updates.
 
 Public page/API rejection checks and the signed-in owner dashboard passed after
-publication. A temporary-key production capture test is the remaining acceptance
-step at the time of this record. Native desktop release verification remains in
-the earlier v0.3.5 record; this release does not ship a new desktop installer.
+publication. The first two authorized live attempts exposed Workers rejecting
+the standard Fetch `redirect: error` mode before sending the renderer request.
+The temporary key was revoked, both attempts counted, and both outbound hops now
+use manual redirects with non-OK rejection. A Workers runtime reproduction and
+redirect regression checks passed. The renderer correction merged in VibersVault
+PR #32 and deployed as version `c3037a3a-a52d-4b47-b50e-5301eea836d0`.
+A fresh temporary-key production capture test remains the final acceptance step.
+Native desktop release verification remains in the earlier v0.3.5 record; this
+release does not ship a new desktop installer.

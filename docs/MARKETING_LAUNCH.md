@@ -147,7 +147,7 @@ A launch is ready for organic submissions when the real native trial passes, the
 ## Developer API offer — October 25, 2026
 
 CaptureRecall now offers local screenshot recall, optional hosted libraries and
-a public-website screenshot API for developers. Website version 13 is live. The
+a public-website screenshot API for developers. Website version 14 is live. The
 API offer is 25 free attempts per UTC month; Personal includes 1,000/month for
 CAD $8; Team includes 1,000 per paid seat/month for CAD $15/seat, two seats minimum.
 All accounts have hard quotas, rate/concurrency limits and shared capacity limits;
