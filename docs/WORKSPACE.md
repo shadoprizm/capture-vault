@@ -91,6 +91,11 @@ The temporary key was revoked, both attempts counted, and both outbound hops now
 use manual redirects with non-OK rejection. A Workers runtime reproduction and
 redirect regression checks passed. The renderer correction merged in VibersVault
 PR #32 and deployed as version `c3037a3a-a52d-4b47-b50e-5301eea836d0`.
-A fresh temporary-key production capture test remains the final acceptance step.
+The owner-approved replacement-key production test then passed twice. Each public
+homepage capture returned HTTP 200 with a fully loaded 1280 × 720 PNG; account
+usage rose from two to four attempts. The temporary key was immediately revoked
+and the dashboard confirmed no active developer keys. Images were returned only,
+not saved to the hosted library, and the credential stayed in page memory. Both
+Linux and macOS CI jobs for the documentation launch PR #9 passed.
 Native desktop release verification remains in the earlier v0.3.5 record; this
 release does not ship a new desktop installer.
