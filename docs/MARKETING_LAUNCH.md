@@ -143,3 +143,25 @@ Baseline on October 10 before marketing publication, from GitHub release assets:
 If downloads rise but useful trials do not, fix installation/capture first. If trials succeed but testers do not return, investigate real retrieval needs. If several testers want to search old screenshots, prioritize a scoped import feature investigation. Keep Mac notarization as a trust and distribution prerequisite before broad Mac promotion. Neither feature is implied to have shipped in this sprint.
 
 A launch is ready for organic submissions when the real native trial passes, the release links and checksums are correct, the guide is reachable on mobile/desktop, and someone can respond to feedback. A recording, external submission receipt, indexed URL, or paid campaign may only be marked complete when actually verified.
+
+## Developer API offer — October 25, 2026
+
+CaptureRecall now offers local screenshot recall, optional hosted libraries and
+a public-website screenshot API for developers. Website version 13 is live. The
+API offer is 25 free attempts per UTC month; Personal includes 1,000/month for
+CAD $8; Team includes 1,000 per paid seat/month for CAD $15/seat, two seats minimum.
+All accounts have hard quotas, rate/concurrency limits and shared capacity limits;
+there is no automatic overage billing. Failed captures and cache hits count.
+
+Canonical developer page: https://capturerecall.com/developers/
+Dashboard: https://capturerecall.com/developers/dashboard/
+Specification: https://capturerecall.com/openapi.json
+
+Published copy distinguishes cloud API rendering from the free local-first
+desktop app. PNG/JPEG, mobile/desktop viewport and full-page capture are available;
+private library saving requires PNG and an active hosted plan. Do not advertise
+login cookies, private-network capture, CAPTCHA bypass, arbitrary browser scripts,
+a new native desktop version, an uptime guarantee or guaranteed search rankings.
+The homepage, developer documentation, pricing, feature/privacy/terms pages,
+public navigation, canonical metadata, JSON-LD, sitemap and llms.txt were updated.
+Actual indexing and AI citations remain external outcomes.

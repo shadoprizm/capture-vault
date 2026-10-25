@@ -21,3 +21,23 @@ Live testing with the existing owner device key exposed v0.3.4 failing PNG resto
 Version 0.3.5 is installed on Linux from the verified DEB payload in the user installation directory, and on Mac as /Applications/CaptureRecall.app. The Linux AppImage hit a graphics failure on this NVIDIA system; the native DEB payload runs with per-app graphics compatibility settings. Device credentials were saved outside Git in owner-only files at ~/.config/CaptureRecall/hosted-connection.json on Linux and ~/Library/Application Support/CaptureRecall/hosted-connection.json on Mac, as explicitly requested. The app itself still clears its in-memory key on leaving Settings.
 
 These checks call the desktop native implementation directly. GUI button automation was unavailable; it is not claimed as verified. The in-app browser still hit an OpenAI sign-in error; the existing signed-in Chrome session provided the existing device key without creating or rotating credentials.
+
+## Developer screenshot API — October 25, 2026
+
+The existing Personal and Team subscriptions now include website screenshot API
+capacity: 1,000 attempts per UTC calendar month for Personal, and 1,000 per paid
+Team seat pooled across the account's API keys. Free accounts receive 25 attempts
+subject to a shared free capacity budget. These additions do not change existing
+subscription prices or create another billing product. No automatic overage
+charges or rollover are enabled. Key management and usage are at
+https://capturerecall.com/developers/dashboard/; examples and OpenAPI are linked
+from https://capturerecall.com/developers/.
+
+Capture runs in Cloudflare-hosted browsers. Direct PNG/JPEG return is supported;
+saving a PNG uses the existing private library authorization and storage quota.
+Keys are hashed, revocable, owner/library scoped, and expire after one year.
+Atomic D1 reservations enforce quota, rate, concurrency and shared browser-time
+budgets before capture. One-use, request-bound tickets authorize the renderer.
+Permanent owner hosted Pro remains unlimited for its existing library features,
+but developer capture has a bounded 1,000-attempt allowance and the unfunded
+global browser budget. Source and operations are in the separate website repo.

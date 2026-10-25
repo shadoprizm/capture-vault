@@ -64,3 +64,27 @@ The production device API returned the expected JSON 401 to a fabricated key sen
 v0.3.5, code tag `1f958df0dd3dd65ff2dd1b7fea22b6c3b977b262`, was merged through PR #7 at `b69f812c3345cd0ee621ad63bb502611c76c1c54`. A valid-key live test found v0.3.4 could upload but failed to restore an extensionless temporary PNG. v0.3.5 adds .png before import and a regression test. Both platforms passed 24 native tests and live connection, upload, restore and cross-device restore using only synthetic images. Pixels and metadata match; restored captures receive new local IDs. All four downloaded installers match checksum files and GitHub digests; both release workflows passed. v0.3.5 is installed on both user machines. Linux uses the native DEB payload in ~/.local/opt/CaptureRecall/0.3.5 through ~/.local/bin/capture-vault; the AppImage hit EGL/graphics initialization failures on this NVIDIA desktop. Mac uses /Applications/CaptureRecall.app, with its signature and version verified. Earlier app copies and database snapshots were preserved.
 
 Website version 12, source `6d9f742ecdd09478f0053fcb9b68b39d0b5bcdf6`, advertises verified v0.3.5 packages and warns that v0.3.4 restore is broken. Credentials remain outside Git in owner-only private files. Live checks used the native desktop implementation; GUI button interaction and physical screen capture were not automated.
+
+## Developer API publication — October 25, 2026
+
+Website version 13, source `428f853c285160f95d4813b227ef12fe2b0474bb`, deployed
+successfully at https://capturerecall.com using environment revision 5. The Mac
+website checkout is `/Users/jratelle/Coding Projects/capture-vault/website`, a
+separate Sites repository with the same project identity as the Linux checkout.
+The Linux website checkout was clean at `6d9f742` before publication; it needs a
+fresh authenticated source fetch before its next edit. Do not overwrite it from
+a folder copy. Desktop source and packages remain v0.3.5.
+
+The publication adds developer keys, website capture, usage and hard quotas,
+private PNG library saving, OpenAPI documentation, updated product/pricing/privacy
+copy, structured data and crawler facts. Twenty-five service/marketing tests,
+TypeScript checking and the production build passed. Five shared renderer tests
+and an actual cross-service handler/ticket contract test also passed. Local D1
+HTTP tests verified key creation/authentication/revocation and ticket replay
+rejection. The production runtime dependency audit reports zero advisories after
+compatible Next, Sharp and supporting dependency updates.
+
+Public page/API rejection checks and the signed-in owner dashboard passed after
+publication. A temporary-key production capture test is the remaining acceptance
+step at the time of this record. Native desktop release verification remains in
+the earlier v0.3.5 record; this release does not ship a new desktop installer.
